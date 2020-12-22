@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -12,10 +12,10 @@
 from print_out import print_out_str
 from parser_util import register_parser, RamParser, cleanupString
 from linux_list import ListWalker
-
+from parsers.filetracking import FileTracking
 
 """ Returns number of pages """
-def get_shmem_swap_usage(ramdump):
+def get_shmem_swap_usage(ramdump, memory_file):
     shmem_swaplist = ramdump.address_of("shmem_swaplist")
     if not shmem_swaplist:
         return 0
@@ -23,15 +23,58 @@ def get_shmem_swap_usage(ramdump):
     offset = ramdump.field_offset('struct shmem_inode_info', 'swaplist')
     if not offset:
         return 0
+    inode_offset = ramdump.field_offset('struct shmem_inode_info', 'vfs_inode')
+    if not inode_offset:
+        return 0
 
     iter = ListWalker(ramdump, shmem_swaplist, offset)
 
     total = 0
+    seen = {}
     for shmem_inode_info in iter:
+        swap_pages = ramdump.read_structure_field(
+                    shmem_inode_info, 'struct shmem_inode_info', 'swapped')
+        inode = shmem_inode_info + inode_offset
+        addres_space = ramdump.read_structure_field(inode, 'struct inode',
+                                        'i_mapping')
+        if addres_space in seen:
+            seen[addres_space] = seen[addres_space] + swap_pages
+        else:
+            seen[addres_space] = swap_pages
         total += ramdump.read_structure_field(
                     shmem_inode_info, 'struct shmem_inode_info', 'swapped')
 
-    return total
+    sortlist = sorted(seen.items(),  key=lambda kv: kv[1],
+                    reverse=True)
+    i = 0
+    string = "TOP 3 swapped SHMEM files are:\n"
+    pathtracking = FileTracking(ramdump)
+    for k,v in sortlist:
+        #k is struct address_space
+        if i < 3:
+            i = i + 1
+            addr_space_format = "Address_space 0x{0:x} Allocated {1} pages\n".format(k,v)
+            string = string + addr_space_format
+            inode = ramdump.read_structure_field(k, 'struct address_space',
+                    'host')
+            if inode is not None:
+                dentry_list = ramdump.read_structure_field(inode, 'struct inode',
+                        'i_dentry')
+            if dentry_list is not None:
+                dentry = ramdump.container_of(dentry_list, 'struct dentry',
+                        'd_u')
+            if dentry is not None:
+                d_name_ptr = (dentry + ramdump.field_offset('struct dentry ',
+                    'd_name')) + ramdump.field_offset('struct qstr', 'name')
+                name = ramdump.read_cstring(ramdump.read_pointer(d_name_ptr),
+                        100)
+                path, cycle_flag = pathtracking.get_filepath('', name, dentry)
+                path = "file name:  " + path + '\n'
+                string = string + path
+        else:
+            break
+
+    return total,string
 
 
 def do_dump_process_memory(ramdump):
@@ -53,7 +96,8 @@ def do_dump_process_memory(ramdump):
                             'vm_zone_stat[NR_SLAB_UNRECLAIMABLE]')
         total_shmem = ramdump.read_word('vm_node_stat[NR_SHMEM]')
 
-    total_shmem_swap = get_shmem_swap_usage(ramdump)
+    memory_file = ramdump.open_file('memory.txt')
+    total_shmem_swap, shmem_swap_file = get_shmem_swap_usage(ramdump,memory_file)
     total_slab = slab_rec + slab_unrec
     if(ramdump.kernel_version > (4, 20, 0)):
         total_mem = ramdump.read_word('_totalram_pages') * 4
@@ -65,7 +109,6 @@ def do_dump_process_memory(ramdump):
     offset_adj = ramdump.field_offset('struct signal_struct', 'oom_score_adj')
     offset_pid = ramdump.field_offset('struct task_struct', 'pid')
     task_info = []
-    memory_file = ramdump.open_file('memory.txt')
     memory_file.write('Total RAM: {0:,}kB\n'.format(total_mem))
     memory_file.write('Total free memory: {0:,}kB({1:.1f}%)\n'.format(
             total_free * 4, (100.0 * total_free * 4) / total_mem))
@@ -79,6 +122,7 @@ def do_dump_process_memory(ramdump):
         total_shmem * 4, (100.0 * total_shmem * 4) / total_mem))
     memory_file.write('Total SHMEM (SWAP): {0:,}kB({1:.1f}%)\n\n'.format(
         total_shmem_swap * 4, (100.0 * total_shmem_swap * 4) / total_mem))
+    memory_file.write('{0}\n'.format(shmem_swap_file))
 
     for task in ramdump.for_each_process():
         next_thread_comm = task + offset_comm

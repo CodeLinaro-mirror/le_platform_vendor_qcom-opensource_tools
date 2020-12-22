@@ -899,6 +899,22 @@ class MDPinfo(RamParser):
             rot = rot & ~(1 << 5)
         return rotation
 
+    def secure(self, sec):
+
+        sec = int(sec)
+        secure_ = ""
+        if (sec==0):
+            secure_ = "FB_NON_SEC"
+        elif (sec==1):
+            secure_ = "FB_SEC"
+        elif (sec==2):
+            secure_ = "FB_NON_SEC_DIR_TRANS"
+        elif (sec==3):
+            secure_ = "FB_SEC_DIR_TRANS"
+        else:
+            secure_ = "FB_INVALID"
+        return secure_
+
     def fmt_modifier(self, data):
 
         mod=int(data)
@@ -934,6 +950,7 @@ class MDPinfo(RamParser):
             tmp = tmp + "CRTC:" + str(int(data_arr[0], 16)) + "|PLANE:" + str(int(data_arr[1], 16)) +"|FB-id:" + str(int(data_arr[2], 16))
             tmp = tmp + "|SRC:[ " + str(int(data_arr[3], 16)) + " " + str(int(data_arr[4], 16)) + " " + str(int(data_arr[5], 16)) + " " + str(int(data_arr[6], 16)) + " ]"
             tmp = tmp + "|DST:[ " + str(int(data_arr[7], 16)) + " " + str(int(data_arr[8], 16)) + " " + str(int(data_arr[9], 16)) + " " + str(int(data_arr[10], 16)) + " ]"
+            tmp = tmp + "|" +self.secure(str(int(data_arr[12], 16)))
         elif self.log_2 != -1 :
             self.counter= self.counter+1
             tmp = tmp +  self.pipe(str(int(data_arr[3], 16))) + "|STAGE:" + str(int(data_arr[4], 16)) + "|"
@@ -1261,10 +1278,17 @@ class MDPinfo(RamParser):
                 tmp=tmp+"==> crtc_state->active_changed"+" "
             if (int(data_arr[3],16)==1):
                 tmp=tmp+"==> crtc_state->connectors_changed"
-        elif(len(data_arr)<4):
+        elif(len(data_arr)==3):
             tmp = tmp + "==> "
             tmp=tmp+"flags: "+self.flags(int(data_arr[1],16))+"  "
             tmp=tmp+"private_flags: "+self.private_flags(int(data_arr[2],16))
+        elif(len(data_arr)==9):
+            tmp = tmp + "==> "
+            tmp=tmp+"flags: "+self.flags(int(data_arr[1],16))+"  "
+            tmp=tmp+"private_flags: "+self.private_flags(int(data_arr[2],16))
+            tmp=tmp+" top: "+self.gettopotype(data_arr[3])
+            tmp=tmp+" refresh: "+ str(int(data_arr[4],16))
+            tmp=tmp+" wxh: "+ str(int(data_arr[5],16)) + "x" + str(int(data_arr[6],16))
         sde_dbg_evtlog_log_["data"] = tmp
         self.default_parse(sde_dbg_evtlog_log_, output_fd)
 

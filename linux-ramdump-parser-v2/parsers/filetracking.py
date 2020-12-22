@@ -34,7 +34,7 @@ class FileTracking(RamParser):
         cycle_detection = 12
         while True:
             if name == '/' or name == '':
-                return name, cycle_flag
+                return path, cycle_flag
             path = '/' + name + path
             parent = self.ramdump.read_structure_field(parent, 'struct dentry', 'd_parent')
             if parent is not None:

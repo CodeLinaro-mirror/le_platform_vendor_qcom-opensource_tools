@@ -371,7 +371,10 @@ class FtraceParser_Event(object):
                 ##t = local_timestamp / 1000000000.0
                 temp_data = "                {10}   {0}  {1:.6f}: sched_switch:{2}{3}:{4}     [{5}]     {6} ==> {7}:{8}     [{9}]\n".format(self.cpu, round(local_timestamp/1000000000.0,6),
                                                                                                                                        space_data,prev_comm,prev_pid,prev_prio,prev_state_info,next_comm,next_pid,next_prio,curr_com)
-                self.ftrace_time_data[t] = temp_data
+                temp_data1 = "                {9}   {0}  {1:.6f}: sched_switch: prev_comm={2} prev_pid={3} prev_prio={4} prev_state={5} ==> next_comm={6} next_pid={7} next_prio={8}\n"                                                                                                                   .format(self.cpu, round(local_timestamp/1000000000.0,6),
+                                                                                                                                       prev_comm,prev_pid,prev_prio,prev_state_info,next_comm,next_pid,next_prio,curr_com)
+
+                self.ftrace_time_data[t] = temp_data1
         elif event_name == "softirq_raise":
                 trace_event_softirq_vec_offset = self.ramdump.field_offset('struct ' + 'trace_event_raw_softirq', "vec")
                 if trace_event_softirq_vec_offset:

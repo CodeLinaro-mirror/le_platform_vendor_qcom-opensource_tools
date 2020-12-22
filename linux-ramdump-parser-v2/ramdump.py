@@ -629,15 +629,17 @@ class RamDump():
                 file_path = os.path.join(options.autodump, 'ap_minidump.elf')
             self.ram_elf_file = file_path
             if not os.path.exists(file_path):
-                print_out_str("!!! ELF file open failed")
-                sys.exit(1)
+                print_out_str("ELF file not exists, try to generate")
+                if minidump_util.generate_elf(options.autodump):
+                    print_out_str("!!! ELF file generate failed")
+                    sys.exit(1)
             fd = open(file_path, 'rb')
             self.elffile = ELFFile(fd)
             for idx, s in enumerate(self.elffile.iter_segments()):
                 pa = int(s['p_paddr'])
                 va = int(s['p_vaddr'])
                 size = int(s['p_filesz'])
-                end_addr = pa + size
+                end_addr = pa + size - 1
                 for section in self.elffile.iter_sections():
                     if (not section.is_null() and
                             s.section_in_segment(section)):
@@ -856,7 +858,7 @@ class RamDump():
         f = None
         try:
             dir_path = os.path.dirname(file_path)
-            if not os.path.exists(dir_path) and 'w' in mode:
+            if not os.path.exists(dir_path) and ('w' in mode or 'a' in mode):
                 os.makedirs(dir_path)
             f = open(file_path, mode)
         except:

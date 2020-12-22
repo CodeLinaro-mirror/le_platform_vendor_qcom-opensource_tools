@@ -217,24 +217,25 @@ class RunQueues(RamParser):
 
             if self.ramdump.arm64:
                 stack_align = 8
-                stack_size = 0x4000
+                stack_size = 0x1000
+                loop = 4
             else:
                 stack_align = 4
-                stack_size = 0x2000
-
+                stack_size = 0x1000
+                loop = 2
             print_out_str('\nCore_{} call stack :\n'.format(index))
-
-            for i in range(stack_virt_addr, stack_virt_addr + stack_size, stack_align):
-                if index == 1:
-                    print("{0:x}".format(i))
-                callstack_addr = self.ramdump.read_word(i)
-                if callstack_addr is None:
-                    continue
-                if text_start_addr <= callstack_addr and callstack_addr < text_end_addr:
-                    wname = self.ramdump.unwind_lookup(callstack_addr)
-                    if wname is not None:
-                        print_out_str('0x{0:x}:{1}'.format(i, wname))
-
+            for i in range(loop):
+                for j in range(stack_virt_addr, stack_virt_addr + stack_size, stack_align):
+                    callstack_addr = self.ramdump.read_word(j)
+                    if callstack_addr is None:
+                        continue
+                    if text_start_addr <= callstack_addr and callstack_addr < text_end_addr:
+                        wname = self.ramdump.unwind_lookup(callstack_addr)
+                        if wname is not None:
+                            print_out_str('0x{0:x}:{1}'.format(j, wname))
+                stack_mdr = stack_mdr + self.ramdump.sizeof('struct md_region')
+                stack_virt_addr = stack_mdr + self.ramdump.field_offset('struct md_region', 'virt_addr')
+                stack_virt_addr = self.ramdump.read_u64(stack_virt_addr)
             index = index + 1
 
 

@@ -197,11 +197,7 @@ class DebugImage_v2():
         print_out_str(
             'Parsing scandump context start {0:x} end {1:x} {2} {3}'.format(start, end, output, input))
         header_bin = ram_dump.open_file(input, 'wb')
-
-        it = range(start, end)
-        for i in it:
-            val = ram_dump.read_byte(i, False)
-            header_bin.write(struct.pack("<B", val))
+        header_bin.write(ram_dump.read_physical(start, end - start))
         header_bin.close()
         subprocess.call('py -2 {0} -d {1} -o {2} -f {3} -c {4}'.format(scan_wrapper_path, input, output, arch, chipset))
         sv2 = Scandump_v2(core_num,ram_dump,version)
@@ -807,10 +803,7 @@ class DebugImage_v2():
         print_out_str(
             'Parsing mhm dump start {0:x} end {1:x} {2}'.format(start, end, input))
         header_bin = ram_dump.open_file(input, mode='wb')
-        it = range(start, end)
-        for i in it:
-            val = ram_dump.read_byte(i, False)
-            header_bin.write(struct.pack("<B", val))
+        header_bin.write(ram_dump.read_physical(start, end - start))
         header_bin.close()
         return
     class MsmDumpTable(object):

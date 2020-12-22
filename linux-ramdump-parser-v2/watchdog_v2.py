@@ -1370,7 +1370,8 @@ def get_wdog_timing(ramdump):
             tick_bc_evt_dev, 'struct clock_event_device', 'cpumask')
         tick_bc_cpumask_bits = ramdump.read_structure_field(
             tick_bc_cpumask, 'struct cpumask', 'bits')
-
+        if tick_bc_cpumask_bits is None:
+            tick_bc_cpumask_bits = 0
     if ramdump.is_config_defined('CONFIG_SMP'):
         runqueues_addr = ramdump.address_of('runqueues')
         online_offset = ramdump.field_offset('struct rq', 'online')
@@ -1389,6 +1390,8 @@ def get_wdog_timing(ramdump):
     elif (ramdump.kernel_version >= (4, 4, 0)):
         cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
     else:
+        cpu_isolated_bits = 0
+    if cpu_isolated_bits is None:
         cpu_isolated_bits = 0
     if not ramdump.minidump:
         wdog_task = ramdump.read_structure_field(

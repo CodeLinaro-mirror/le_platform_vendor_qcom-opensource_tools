@@ -103,12 +103,46 @@ def verify_active_cpus(ramdump):
                                 mask_bitset_pos(cluster_isolated_cpus)))
                 print_out_str("*" * 10 + " WARNING " + "*" * 10 + "\n")
 
+def dump_cpufreq_data(ramdump):
+    cpufreq_data_addr = ramdump.address_of('cpufreq_cpu_data')
+    cpuinfo_off = ramdump.field_offset('struct cpufreq_policy', 'cpuinfo')
+    runqueues_addr = ramdump.address_of('runqueues')
+
+    print_out_str("\nCPU Frequency information:\n" + "-" * 10)
+    for i in ramdump.iter_cpus():
+        cpu_data_addr = ramdump.read_u64(cpufreq_data_addr + ramdump.per_cpu_offset(i))
+        rq_addr = runqueues_addr + ramdump.per_cpu_offset(i)
+
+        cur_freq = ramdump.read_structure_field(cpu_data_addr, 'struct cpufreq_policy', 'cur')
+        min_freq = ramdump.read_structure_field(cpu_data_addr, 'struct cpufreq_policy', 'min')
+        max_freq = ramdump.read_structure_field(cpu_data_addr, 'struct cpufreq_policy', 'max')
+
+        cpuinfo_min_freq = ramdump.read_int(cpu_data_addr + cpuinfo_off + ramdump.field_offset('struct cpufreq_cpuinfo', 'min_freq'))
+        cpuinfo_max_freq = ramdump.read_int(cpu_data_addr + cpuinfo_off + ramdump.field_offset('struct cpufreq_cpuinfo', 'max_freq'))
+
+        gov = ramdump.read_structure_field(cpu_data_addr, 'struct cpufreq_policy', 'governor')
+        gov_name = ramdump.read_cstring(gov + ramdump.field_offset('struct cpufreq_governor', 'name'))
+
+        cap_orig = ramdump.read_structure_field(rq_addr, 'struct rq', 'cpu_capacity_orig')
+        curr_cap = ramdump.read_structure_field(rq_addr, 'struct rq', 'cpu_capacity')
+        thermal_cap = ramdump.read_word(ramdump.array_index(ramdump.address_of('thermal_cap_cpu'), 'unsigned long', i))
+
+        arch_scale = ramdump.read_int(ramdump.address_of('cpu_scale') + ramdump.per_cpu_offset(i))
+
+        print_out_str("CPU:{0}\tGovernor:{1}\t cur_freq:{2}, max_freq:{3}, min_freq{4}  cpuinfo: min_freq:{5}, max_freq:{6}"
+                    .format(i, gov_name, cur_freq, max_freq, min_freq, cpuinfo_min_freq, cpuinfo_max_freq))
+        print_out_str("\tCapacity: capacity_orig:{0}, cur_cap:{1}, arch_scale:{2}\n".format(cap_orig, curr_cap, arch_scale))
+
+
 @register_parser('--sched-info', 'Verify scheduler\'s various parameter status')
 class Schedinfo(RamParser):
     def parse(self):
         global cpu_online_bits
         # Active cpu check verified by default!
         #verify_active_cpus(self.ramdump)
+
+        # print cpufreq info
+        dump_cpufreq_data(self.ramdump)
 
         # verify nr_migrates
         sched_nr_migrate = self.ramdump.read_u32('sysctl_sched_nr_migrate')

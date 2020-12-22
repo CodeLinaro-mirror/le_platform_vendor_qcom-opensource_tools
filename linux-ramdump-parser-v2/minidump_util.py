@@ -12,6 +12,7 @@
 import sys
 import re
 import os
+import struct
 from print_out import print_out_str
 
 
@@ -57,3 +58,90 @@ def read_physical_minidump(ebi_files,ebi_files_ramfile,elffile,addr,length):
         ebi[0].seek(offset)
         a = ebi[0].read(length)
         return a
+
+def add_file(fo, outdir, path):
+        try:
+            path = os.path.join(outdir, path)
+            fi = open(path, "rb")
+        except:
+            print_out_str("Not able to open file %s" % (path))
+            return -1
+        while True:
+            buf = fi.read(4096)
+            if len(buf) == 0:
+                break
+            fo.write(buf)
+        fi.close()
+        return 0
+
+def get_strings(buf, length):
+        offset = 0
+        string = ""
+        nlist = []
+        begin = False
+        str_tbl = ""
+        while offset < length:
+            str_tbl = ""
+            if not begin:
+                (ch,) = struct.unpack_from("<B", buf, offset)
+                str_tbl += chr(ch)
+                (ch,) = struct.unpack_from("<B", buf, offset+1)
+                str_tbl += chr(ch)
+                (ch,) = struct.unpack_from("<B", buf, offset+2)
+                str_tbl += chr(ch)
+                (ch,) = struct.unpack_from("<B", buf, offset+3)
+                str_tbl += chr(ch)
+                (ch,) = struct.unpack_from("<B", buf, offset+4)
+                str_tbl += chr(ch)
+                (ch,) = struct.unpack_from("<B", buf, offset+5)
+                str_tbl += chr(ch)
+                (ch,) = struct.unpack_from("<B", buf, offset+6)
+                str_tbl += chr(ch)
+                if str_tbl == "STR_TBL":
+                    begin = True
+                    offset += 6
+                else:
+                    offset += 1
+                continue
+            (ch,) = struct.unpack_from("<B", buf, offset)
+            offset += 1
+            if ch >= 0x30 and ch < 0x80:
+                string += chr(ch)
+            elif (string != "" and len(string) >= 3 and
+                  string != 'linux_banner' and string != 'minidump_table'):
+                nlist.append(string)
+                string = ""
+            else:
+                string = ""
+            if ch == 0:
+                (ch1,) = struct.unpack_from("<B", buf, offset+1)
+                if ch1 == 0:
+                    (ch2,) = struct.unpack_from("<B", buf, offset+2)
+                    if ch2 == 0:
+                        return nlist
+        return nlist
+
+def generate_elf(outdir):
+        elfhd = os.path.join(outdir, "md_KELF_HEADER.BIN")
+        if not os.path.exists(elfhd):
+            print_out_str("ELF header binary is missing")
+            return 1
+        fi = open(elfhd, "rb")
+        outfile = os.path.join(outdir, "ap_minidump.elf")
+        fo = open(outfile, "wb")
+
+        hsize = os.path.getsize(elfhd)
+        print_out_str("ELF header size %d" % hsize)
+        buf = fi.read(hsize)
+        fo.write(buf)
+        nlist = get_strings(buf, len(buf))
+        for names in nlist:
+            filepath = "md_" + names + ".BIN"
+            ret = add_file(fo, outdir, filepath)
+            if ret == -1:
+                fo.close()
+                fi.close()
+                return 1
+        fi.close()
+        fo.close()
+        return 0
