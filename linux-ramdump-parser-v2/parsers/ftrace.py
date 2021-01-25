@@ -188,6 +188,18 @@ class FtraceParser(RamParser):
 
             if trace_name is None or trace_name == 0x0 or trace_name == "0x0" or trace_name == "None" or trace_name == "null" or len(trace_name) < 1:
                 ftrace_out = self.ramdump.open_file('ftrace.txt','w')
+                header_data = "# tracer: nop \n" \
+                              "#\n" \
+                              "# entries-in-buffer/entries-written: 315882/1727030   #P:8\n" \
+                              "#\n" \
+                              "#                              _-----=> irqs-off\n" \
+                              "#                             / _----=> need-resched\n" \
+                              "#                            | / _---=> hardirq/softirq\n" \
+                              "#                            || / _--=> preempt-depth\n" \
+                              "#                            ||| /     delay\n" \
+                              "#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION\n" \
+                              "#              | |       |   ||||       |         |\n"
+                ftrace_out.write(header_data)
             else:
                 ftrace_out = self.ramdump.open_file('ftrace_' + trace_name + '.txt','w')
 

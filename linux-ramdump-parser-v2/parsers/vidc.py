@@ -268,8 +268,69 @@ class DumpVidc(RamParser):
 
         session_type = self.ramdump.read_structure_field(
             head, 'struct msm_vidc_inst', 'session_type')
+        session_type = hex(session_type)
+        session_type_name = 'unknown'
+        if session_type=="0x0":
+            session_type_name="MSM_VIDC_ENCODER"
+        elif session_type=="0x1":
+            session_type_name="MSM_VIDC_DECODER"
+        elif session_type=="0x2":
+            session_type_name="MSM_VIDC_CVP"
+        '''self.vidc_info.write('Session Type: \t{0}\n'\
+                             .format('DECODER' if session_type else 'ENCODER').expandtabs(20))'''
+
         self.vidc_info.write('Session Type: \t{0}\n'\
-                             .format('DECODER' if session_type else 'ENCODER').expandtabs(20))
+                             .format(session_type_name).expandtabs(20))
+        cap_out = head + self.ramdump.field_offset('struct msm_vidc_inst', 'capability')
+        cap_codec_offset = self.ramdump.field_offset('struct msm_vidc_capability', 'codec')
+        codec_name = self.ramdump.read_u64(cap_out + cap_codec_offset)
+        codec_name = hex(codec_name)
+
+        #print "codec_name = {0}".format(codec_name)
+        codec_data = 'unknwon'
+        if codec_name=="0x0":
+            codec_data="HAL_VIDEO_CODEC_UNKNOWN"
+        elif codec_name=="0x1":
+            codec_data="HAL_VIDEO_CODEC_MVC"
+        elif codec_name=="0x2":
+            codec_data="HAL_VIDEO_CODEC_H264"
+        elif codec_name=="0x4":
+            codec_data="HAL_VIDEO_CODEC_H263"
+        elif codec_name=="0x8":
+            codec_data="HAL_VIDEO_CODEC_MPEG1"
+        elif codec_name=="0x10":
+            codec_data="HAL_VIDEO_CODEC_MPEG2"
+        elif codec_name=="0x20":
+            codec_data="HAL_VIDEO_CODEC_MPEG4"
+        elif codec_name=="0x40":
+            codec_data="HAL_VIDEO_CODEC_DIVX_311"
+        elif codec_name=="0x80":
+            codec_data="HAL_VIDEO_CODEC_DIVX"
+        elif codec_name=="0x100":
+            codec_data="HAL_VIDEO_CODEC_VC1"
+        elif codec_name=="0x200":
+            codec_data="HAL_VIDEO_CODEC_SPARK"
+        elif codec_name=="0x400":
+            codec_data="HAL_VIDEO_CODEC_VP6"
+        elif codec_name=="0x800":
+            codec_data="HAL_VIDEO_CODEC_VP7"
+        elif codec_name=="0x1000":
+            codec_data="HAL_VIDEO_CODEC_VP8"
+        elif codec_name=="0x2000":
+            codec_data="HAL_VIDEO_CODEC_HEVC"
+        elif codec_name=="0x4000":
+            codec_data="HAL_VIDEO_CODEC_VP9"
+        elif codec_name=="0x8000":
+            codec_data="HAL_VIDEO_CODEC_TME"
+        elif codec_name=="0x10000":
+            codec_data="HAL_VIDEO_CODEC_CVP"
+        elif codec_name=="0x80000000":
+            codec_data="HAL_VIDEO_CODEC_HEVC_HYBRID"
+        elif codec_name=="0x10000000":
+            codec_data="HAL_UNUSED_CODEC"
+
+        self.vidc_info.write('Codec: \t{0}\n'\
+                             .format(codec_data).expandtabs(20))
 
         session_addr = self.ramdump.read_structure_field(
             head, 'struct msm_vidc_inst', 'session')
@@ -306,7 +367,7 @@ class DumpVidc(RamParser):
             head, 'struct msm_vidc_inst', 'entropy_mode')
         self.vidc_info.write('Entropy Mode: \t{0}\n'.format(entropy_mode).expandtabs(20))
 
-        smem_client = self.ramdump.read_structure_field(
+        '''smem_client = self.ramdump.read_structure_field(
             head,'struct msm_vidc_inst', 'mem_client')
 
         client = self.ramdump.read_structure_field(
@@ -315,20 +376,120 @@ class DumpVidc(RamParser):
         display_name = self.ramdump.read_structure_cstring(
            client , 'struct ion_client', 'display_name')
 
-        self.vidc_info.write('Client: \t{0}\n'.format(display_name).expandtabs(20))
+        self.vidc_info.write('Client: \t{0}\n'.format(display_name).expandtabs(20))'''
 
         output_fmt = head + self.ramdump.field_offset('struct msm_vidc_inst', 'fmts[0]')
         description_addr = output_fmt
         + self.ramdump.field_offset('struct msm_vidc_format', 'description')
         desc_out = self.ramdump.read_cstring(description_addr)
 
+        v4l2_fmt_addr = output_fmt + self.ramdump.field_offset('struct msm_vidc_format', 'v4l2_fmt')
+        #v4l2_fmt_out = self.ramdump.read_u64(v4l2_fmt_addr)
+        v4l2_fmt_out = v4l2_fmt_addr
+
+#        print "v4l2_fmt_out = {0}".format(hex(v4l2_fmt_out))
+        fmt_offset = self.ramdump.field_offset('struct v4l2_format', 'fmt')
+        fmt_addr = v4l2_fmt_out + fmt_offset
+        #print "fmt_addr = {0}".format(hex(v4l2_fmt_out))
+
+        pix_fmt_offset = self.ramdump.field_offset('struct v4l2_pix_format_mplane' ,'pixelformat')
+        pix_fmt_addr = self.ramdump.read_int(fmt_addr + pix_fmt_offset)
+        pix_fmt_addr = hex(pix_fmt_addr)
+
+        #print "pix_fmt_addr = {0}".format(pix_fmt_addr)
+        output_v4l2_fmt_name = "Unknown"
+        if pix_fmt_addr == "0x3231564e":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_NV12"
+            output_color_fmt_name="YCbCr Semiplanar 4:2:0"
+        elif pix_fmt_addr == "0x3132564e":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_NV21"
+            output_color_fmt_name="YCrCb Semiplanar 4:2:0"
+        elif pix_fmt_addr == "0x32313551":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_NV12_512"
+            output_color_fmt_name="YCbCr Semiplanar 4:2:0 512 aligned"
+        elif pix_fmt_addr == "0x30315051":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_SDE_Y_CBCR_H2V2_P010_VENUS"
+            output_color_fmt_name="YCbCr Semiplanar 4:2:0 10bit"
+        elif pix_fmt_addr == "0x38323151":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_NV12_UBWC"
+            output_color_fmt_name="UBWC YCbCr Semiplanar 4:2:0"
+        elif pix_fmt_addr == "0x41323151":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_NV12_TP10_UBWC"
+            output_color_fmt_name="TP10 UBWC 4:2:0"
+        elif pix_fmt_addr == "0x3247504d":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_MPEG2"
+            output_color_fmt_name="Mpeg2"
+        elif pix_fmt_addr == "0x34363248":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_H264"
+            output_color_fmt_name="H264"
+        elif pix_fmt_addr=="0x43564548":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_HEVC"
+            output_color_fmt_name="HEVC"
+        elif pix_fmt_addr=="0x30385056":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_VP8"
+            output_color_fmt_name="VP8"
+        elif pix_fmt_addr=="0x30395056":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_VP9"
+            output_color_fmt_name="VP9"
+        elif pix_fmt_addr=="0x30454d54":
+            output_v4l2_fmt_name="V4L2_PIX_FMT_TME"
+            output_color_fmt_name="TME"
+
         caputre_fmt = head + self.ramdump.field_offset('struct msm_vidc_inst', 'fmts[1]')
         description_addr = caputre_fmt
         + self.ramdump.field_offset('struct msm_vidc_format', 'description')
         desc_cap = self.ramdump.read_cstring(description_addr)
 
-        session_prop = head + self.ramdump.field_offset('struct msm_vidc_inst', 'prop')
+        v4l2_fmt_addr_cap = caputre_fmt + self.ramdump.field_offset('struct msm_vidc_format', 'v4l2_fmt')
+        #v4l2_fmt_out = self.ramdump.read_u64(v4l2_fmt_addr)
+        v4l2_fmt_cap = v4l2_fmt_addr_cap
 
+        #print "v4l2_fmt_cap = {0}".format(hex(v4l2_fmt_cap))
+        fmt_addr_cap = v4l2_fmt_cap + fmt_offset
+        #print "fmt_addr_cap = {0}".format(hex(fmt_addr_cap))
+        pix_fmt_addr_cap = self.ramdump.read_int(fmt_addr_cap + pix_fmt_offset)
+        pix_fmt_addr_cap = hex(pix_fmt_addr_cap)
+        #print "pix_fmt_addr_cap = {0}".format(pix_fmt_addr_cap)
+
+        capture_v4l2_fmt_name = "unkown"
+        if pix_fmt_addr_cap=="0x3231564e":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_NV12"
+            capture_color_fmt_name="YCbCr Semiplanar 4:2:0"
+        elif pix_fmt_addr_cap=="0x3132564e":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_NV21"
+            capture_color_fmt_name="YCrCb Semiplanar 4:2:0"
+        elif pix_fmt_addr_cap=="0x32313551":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_NV12_512"
+            capture_color_fmt_name="YCbCr Semiplanar 4:2:0 512 aligned"
+        elif pix_fmt_addr_cap=="0x30315051":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_SDE_Y_CBCR_H2V2_P010_VENUS"
+            capture_color_fmt_name="YCbCr Semiplanar 4:2:0 10bit"
+        elif pix_fmt_addr_cap=="0x38323151":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_NV12_UBWC"
+            capture_color_fmt_name="UBWC YCbCr Semiplanar 4:2:0"
+        elif pix_fmt_addr_cap=="0x41323151":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_NV12_TP10_UBWC"
+            capture_color_fmt_name="TP10 UBWC 4:2:0"
+        elif pix_fmt_addr_cap=="0x3247504d":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_MPEG2"
+            capture_color_fmt_name="Mpeg2"
+        elif pix_fmt_addr_cap == "0x34363248":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_H264"
+            capture_color_fmt_name="H264"
+        elif pix_fmt_addr_cap=="0x43564548":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_HEVC"
+            capture_color_fmt_name="HEVC"
+        elif pix_fmt_addr_cap=="0x30385056":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_VP8"
+            capture_color_fmt_name="VP8"
+        elif pix_fmt_addr_cap=="0x30395056":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_VP9"
+            capture_color_fmt_name="VP9"
+        elif pix_fmt_addr_cap=="0x30454d54":
+            capture_v4l2_fmt_name="V4L2_PIX_FMT_TME"
+            capture_color_fmt_name="TME"
+
+        session_prop = head + self.ramdump.field_offset('struct msm_vidc_inst', 'prop')
         fps = self.ramdump.read_structure_field(
             session_prop, 'struct session_prop', 'fps')
         self.vidc_info.write('FPS: \t{0}\n'.format(fps).expandtabs(20))
@@ -343,38 +504,112 @@ class DumpVidc(RamParser):
             session_prop, 'struct session_prop', 'height[0]')
 
         bufq_out = head + self.ramdump.field_offset('struct msm_vidc_inst', 'bufq[0]')
-        num_planes_out = self.ramdump.read_structure_field(
+        vb2_bufq_offset = self.ramdump.field_offset('struct buf_queue', 'vb2_bufq')
+        vb2_bufq_out = bufq_out + vb2_bufq_offset
+
+        num_buffers_offset = self.ramdump.field_offset('struct vb2_queue','num_buffers')
+        num_buffers = self.ramdump.read_u64(vb2_bufq_out + num_buffers_offset)
+        #print "num_buffers = {0}".format(num_buffers)
+
+        bufq_cap = head + self.ramdump.field_offset('struct msm_vidc_inst', 'bufq[1]')
+        vb2_bufq_cap = bufq_cap + vb2_bufq_offset
+
+        num_buffers_cap = self.ramdump.read_u64(vb2_bufq_cap + num_buffers_offset)
+        #print "num_buffers_cap = {0}".format(num_buffers_cap)
+
+        '''num_planes_out = self.ramdump.read_structure_field(
             bufq_out, 'struct buf_queue', 'num_planes')
         plane_sizes_out = []
         for i in  range(0,num_planes_out):
             plane_sizes_out.append(self.ramdump.read_structure_field(
-                bufq_out, 'struct buf_queue', 'plane_sizes['+str(i)+']'))
+                bufq_out, 'struct buf_queue', 'plane_sizes['+str(i)+']'))'''
 
-        width_cap = self.ramdump.read_structure_field(
+        '''width_cap = self.ramdump.read_structure_field(
             session_prop, 'struct session_prop', 'width[1]')
         height_cap = self.ramdump.read_structure_field(
-            session_prop, 'struct session_prop', 'height[1]')
+            session_prop, 'struct session_prop', 'height[1]')'''
+        width_cap_offset = self.ramdump.field_offset('struct v4l2_pix_format_mplane' ,'width')
+        width_cap = self.ramdump.read_int(fmt_addr_cap + width_cap_offset)
 
-        bufq_cap = head + self.ramdump.field_offset('struct msm_vidc_inst', 'bufq[1]')
-        num_planes_cap = self.ramdump.read_structure_field(
+        height_cap_offset = self.ramdump.field_offset('struct v4l2_pix_format_mplane' ,'height')
+        height_cap = self.ramdump.read_int(fmt_addr_cap + height_cap_offset)
+
+        #print "height_cap {0}".format(height_cap)
+
+        self.vidc_info.write('Resolution: \t{0} x {1}\n'\
+                             .format(width_cap,height_cap).expandtabs(20))
+
+        #bufq_cap = head + self.ramdump.field_offset('struct msm_vidc_inst', 'bufq[1]')
+        '''num_planes_cap = self.ramdump.read_structure_field(
             bufq_cap, 'struct buf_queue', 'num_planes')
         plane_sizes_cap = []
         for i in  range(0,num_planes_cap):
             plane_sizes_cap.append(self.ramdump.read_structure_field(
-                bufq_cap, 'struct buf_queue', 'plane_sizes['+str(i)+']'))
+                bufq_cap, 'struct buf_queue', 'plane_sizes['+str(i)+']'))'''
 
-        self.vidc_info.write('\nPORT\tWIDTH\tHEIGHT\t'.expandtabs(20)+'FMT\t'\
-                             .expandtabs(30) +'NUM_PLANES\tPLANE_SIZES\n'\
-                             .expandtabs(20) + '-'*140 + '\n')
+        num_planes_offset = self.ramdump.field_offset('struct v4l2_pix_format_mplane' ,'num_planes')
+        num_planes_out = self.ramdump.read_u16(fmt_addr + num_planes_offset)
+        num_planes_cap = self.ramdump.read_u16(fmt_addr_cap + num_planes_offset)
+
+        #print "num_planes_out = {0}".format(num_planes_out)
+        plane_sizes_out = []
+        for i in  range(0,num_planes_out):
+            #plane_sizes_out.append(self.ramdump.read_structure_field(
+             #   fmt_addr, 'struct v4l2_pix_format_mplane', 'plane_fmt['+str(i)+']'))
+            plane_fmt_out = fmt_addr + self.ramdump.field_offset('struct v4l2_pix_format_mplane', 'plane_fmt['+str(i)+']')
+            plan_image_offset = self.ramdump.field_offset('struct v4l2_plane_pix_format', 'sizeimage')
+            imagesize = self.ramdump.read_int(plane_fmt_out + plan_image_offset)
+            #print "imagesize = {0}".format(imagesize)
+            plane_sizes_out.append(imagesize)
+
+        plane_sizes_cap = []
+        for i in  range(0,num_planes_cap):
+            #plane_sizes_out.append(self.ramdump.read_structure_field(
+             #   fmt_addr, 'struct v4l2_pix_format_mplane', 'plane_fmt['+str(i)+']'))
+            plane_fmt_cap = fmt_addr_cap + self.ramdump.field_offset('struct v4l2_pix_format_mplane', 'plane_fmt['+str(i)+']')
+            plan_image_offset = self.ramdump.field_offset('struct v4l2_plane_pix_format', 'sizeimage')
+            imagesize_cap = self.ramdump.read_int(plane_fmt_cap + plan_image_offset)
+            #print "imagesize_cap = {0}".format(imagesize_cap)
+            plane_sizes_cap.append(imagesize_cap)
+
+        self.vidc_info.write('\noutput capability: \n')
+        self.vidc_info.write('color format: \t{0}\n'\
+                             .format(desc_out).expandtabs(20))
+        self.vidc_info.write('v4l2 format: \t{0}\n'\
+                             .format(output_v4l2_fmt_name).expandtabs(20))
+        self.vidc_info.write('num_of_planes: \t{0}\n'\
+                             .format(num_planes_out).expandtabs(20))
+        self.vidc_info.write('buffers_cnt: \t{0}\n'\
+                             .format(num_buffers).expandtabs(20))
+        for idx,item in enumerate(plane_sizes_out):
+            self.vidc_info.write('size for plane: {0}\t {1}\n'\
+                             .format(idx,item).expandtabs(20))
+
+        self.vidc_info.write('\ncapture capability: \n')
+        self.vidc_info.write('color format: \t{0}\n'\
+                             .format(desc_cap).expandtabs(20))
+        self.vidc_info.write('v4l2 format: \t{0}\n'\
+                             .format(capture_v4l2_fmt_name).expandtabs(20))
+        self.vidc_info.write('num_of_planes: \t{0}\n'\
+                             .format(num_planes_cap).expandtabs(20))
+        self.vidc_info.write('buffers_cnt: \t{0}\n'\
+                             .format(num_buffers_cap).expandtabs(20))
+        for idx,item in enumerate(plane_sizes_cap):
+            self.vidc_info.write('size for plane: {0}\t {1}\n'\
+                             .format(idx,item).expandtabs(20))
+
+        self.vidc_info.write('\nPORT\tWIDTH\tHEIGHT\t'.expandtabs(20)+'COLOR FMT\tV4l2 FMT\t'\
+                             .expandtabs(30) +'NUM_PLANES\tBUFFER_CNT\tPLANE_SIZES\n'\
+                             .expandtabs(20) + '-'*172 + '\n')
         self.vidc_info.write('OUTPUT\t{}\t{}\t'.format(width_out,height_out)\
-                             .expandtabs(20)+'{}\t'.format(desc_out).expandtabs(30)\
-                             +'{}\t{}\n'.format(num_planes_out,plane_sizes_out)\
+                             .expandtabs(20)+'{}\t{}\t'.format(desc_out,output_v4l2_fmt_name).expandtabs(30)\
+                             +'{}\t{}\t{}\n'.format(num_planes_out,num_buffers,plane_sizes_out)\
                              .expandtabs(20))
         self.vidc_info.write('CAPUTRE\t{}\t{}\t'.format(width_cap,height_cap)\
-                             .expandtabs(20)+ '{0}\t'.format(desc_cap).expandtabs(30)\
-                             +'{}\t{}\n'.format(num_planes_cap,plane_sizes_cap)
+                             .expandtabs(20)+ '{}\t{}\t'.format(desc_cap,capture_v4l2_fmt_name).expandtabs(30)\
+                             +'{}\t{}\t{}\n'.format(num_planes_cap,num_buffers_cap,plane_sizes_cap)
                              .expandtabs(20))
-        session_crop = session_prop + self.ramdump.field_offset('struct session_prop','crop_info' )
+        '''session_crop = session_prop + self.ramdump.field_offset('struct session_prop','crop_info' )
 
         left = self.ramdump.read_structure_field(
             session_crop, 'struct session_crop', 'left')
@@ -387,7 +622,7 @@ class DumpVidc(RamParser):
 
         self.vidc_info.write('\nCROP_INFO\n=========\nLeft: \t{0}\
                              \nTop: \t{1}\nWidth: \t{2}\nHeight: \t{3}\
-                             \n'.format(left,top,width,height).expandtabs(20))
+                             \n'.format(left,top,width,height).expandtabs(20))'''
 
         buf_count = head + self.ramdump.field_offset('struct msm_vidc_inst', 'count')
 
@@ -470,7 +705,7 @@ class DumpVidc(RamParser):
         else:
             self.vidc_info.write('NONE\n')
 
-        reconbufs = head + self.ramdump.field_offset('struct msm_vidc_inst', 'reconbufs')
+        '''reconbufs = head + self.ramdump.field_offset('struct msm_vidc_inst', 'reconbufs')
         recon_buf_walker = llist.ListWalker(self.ramdump, reconbufs, offset_vidc_list)
         self.vidc_info.write('\nReconstruction Buffers:\n')
         self.vidc_info.write('='*40+'\n')
@@ -479,7 +714,7 @@ class DumpVidc(RamParser):
             self.vidc_info.write('Index\tCR\tCF\n'.expandtabs(10)+'-'*30+'\n')
             recon_buf_walker.walk(reconbufs,self.recon_buf_walker)
         else:
-            self.vidc_info.write('NONE\n')
+            self.vidc_info.write('NONE\n')'''
 
         eosbufs = head + self.ramdump.field_offset('struct msm_vidc_inst', 'eosbufs')
         eos_buf_walker = llist.ListWalker(self.ramdump, eosbufs, offset_vidc_list)

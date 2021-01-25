@@ -137,8 +137,105 @@ class DmesgLib(object):
                 curr_idx = logbuf_addr
                 self.wrap_cnt += 1
 
+    def extract_lockless_dmesg(self):
+        prb_addr = self.ramdump.read_pointer('prb')
+        off = self.ramdump.field_offset('struct printk_ringbuffer', 'desc_ring')
+        desc_ring_addr = prb_addr + off
+
+        off = self.ramdump.field_offset('struct prb_desc_ring', 'count_bits')
+        desc_ring_count = 1 << self.ramdump.read_u32(desc_ring_addr + off)
+        desc_sz = self.ramdump.sizeof('struct prb_desc')
+        off = self.ramdump.field_offset('struct prb_desc_ring', 'descs')
+        descs_addr = self.ramdump.read_ulong(desc_ring_addr + off)
+
+        info_sz = self.ramdump.sizeof('struct printk_info')
+        off = self.ramdump.field_offset('struct prb_desc_ring', 'infos')
+        infos_addr = self.ramdump.read_ulong(desc_ring_addr + off)
+
+        off = self.ramdump.field_offset(
+                                'struct printk_ringbuffer', 'text_data_ring')
+        text_data_ring_addr = prb_addr + off
+
+        off = self.ramdump.field_offset('struct prb_data_ring', 'size_bits')
+        text_data_sz = 1 << self.ramdump.read_u32(text_data_ring_addr + off)
+        off = self.ramdump.field_offset('struct prb_data_ring', 'data')
+        data_addr = self.ramdump.read_ulong(text_data_ring_addr + off)
+
+        sv_off = self.ramdump.field_offset('struct prb_desc', 'state_var')
+        off = self.ramdump.field_offset('struct prb_desc','text_blk_lpos')
+        begin_off = off + self.ramdump.field_offset(
+                                        'struct prb_data_blk_lpos', 'begin')
+        next_off = off + self.ramdump.field_offset(
+                                        'struct prb_data_blk_lpos', 'next')
+        ts_off = self.ramdump.field_offset('struct printk_info', 'ts_nsec')
+        len_off = self.ramdump.field_offset('struct printk_info', 'text_len')
+
+        desc_committed = 1
+        desc_finalized = 2
+        desc_sv_bits = self.ramdump.sizeof('long') * 8
+        desc_flags_shift = desc_sv_bits - 2
+        desc_flags_mask = 3 << desc_flags_shift
+        desc_id_mask = ~desc_flags_mask
+
+        off = self.ramdump.field_offset('struct prb_desc_ring','tail_id')
+        tail_id = self.ramdump.read_u64(desc_ring_addr + off)
+        off = self.ramdump.field_offset('struct prb_desc_ring','head_id')
+        head_id = self.ramdump.read_u64(desc_ring_addr + off)
+
+        did = tail_id
+        while True:
+            ind = did % desc_ring_count
+            desc_off = desc_sz * ind
+            info_off = info_sz * ind
+
+            # skip non-committed record
+            state = 3 & (self.ramdump.read_u64(descs_addr + desc_off +
+                                            sv_off) >> desc_flags_shift)
+            if state != desc_committed and state != desc_finalized:
+                if did == head_id:
+                    break
+                did = (did + 1) & desc_id_mask
+                continue
+
+            begin = self.ramdump.read_ulong(descs_addr + desc_off +
+                                                begin_off) % text_data_sz
+            end = self.ramdump.read_ulong(descs_addr + desc_off +
+                                                next_off) % text_data_sz
+
+            if begin & 1 == 1:
+                text = ""
+            else:
+                if begin > end:
+                    begin = 0
+
+                text_start = begin + self.ramdump.sizeof('long')
+                text_len = self.ramdump.read_u16(infos_addr +
+                                                    info_off + len_off)
+
+                if end - text_start < text_len:
+                    text_len = end - text_start
+
+                text = self.ramdump.read_cstring(data_addr +
+                                                    text_start, text_len)
+
+            time_stamp = self.ramdump.read_u64(infos_addr +
+                                                    info_off + ts_off)
+
+            for line in text.splitlines():
+                msg = u"[{time:12.6f}] {line}\n".format(
+                    time=time_stamp / 1000000000.0,
+                    line=line)
+                self.outfile.write(msg)
+
+            if did == head_id:
+                break
+            did = (did + 1) & desc_id_mask
+
     def extract_dmesg(self):
         major, minor, patch = self.ramdump.kernel_version
+        if (major, minor) >= (5, 10):
+            self.extract_lockless_dmesg()
+            return
         if (major, minor) >= (3, 7):
             self.extract_dmesg_binary()
             return

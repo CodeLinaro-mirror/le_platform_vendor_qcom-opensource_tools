@@ -1,4 +1,4 @@
-# Copyright (c) 2016, 2018, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016, 2018, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -931,6 +931,8 @@ class MDPinfo(RamParser):
         elif(mod==14):
             tmp="map_tp10_tile"
         elif(mod==4):
+            tmp="map_tp10"
+        elif(mod==7):
             tmp="map_tp10_ubwc"
         elif(mod==8):
             tmp="map_tile"

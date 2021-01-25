@@ -350,8 +350,10 @@ class Workqueues(RamParser):
                                  worker_task_addr + offset_comm, 16)
         current_work_addr = self.ramdump.read_word(
                                  worker_addr + current_work_offset)
+        current_func_addr = self.ramdump.read_word(
+                                 current_work_addr + work_func_offset)
         try:
-            phys = self.ramdump.virt_to_phys(current_work_func)
+            phys = self.ramdump.virt_to_phys(current_func_addr)
             current_work_func = self.ramdump.read_word(
                                      current_work_addr + work_func_offset)
             wname = self.ramdump.unwind_lookup(current_work_func)
