@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -174,7 +174,12 @@ class MemStats(RamParser):
             total_free = self.pages_to_mb(total_free)
 
             # slab Memory
-            if (self.ramdump.kernel_version >= (4, 14)):
+            if self.ramdump.kernel_version >= (5, 10):
+                slab_rec = self.ramdump.read_word(
+                   'vm_node_stat[NR_SLAB_RECLAIMABLE_B]')
+                slab_unrec = self.ramdump.read_word(
+                   'vm_node_stat[NR_SLAB_UNRECLAIMABLE_B]')
+            elif (self.ramdump.kernel_version >= (4, 14)):
                 slab_rec = self.ramdump.read_word(
                    'vm_node_stat[NR_SLAB_RECLAIMABLE]')
                 slab_unrec = self.ramdump.read_word(
@@ -184,7 +189,6 @@ class MemStats(RamParser):
                         'vm_zone_stat[NR_SLAB_RECLAIMABLE]')
                 slab_unrec = self.ramdump.read_word(
                         'vm_zone_stat[NR_SLAB_UNRECLAIMABLE]')
-
             total_slab = self.pages_to_mb(slab_rec + slab_unrec)
             # others
             other_mem = self.calculate_vm_node_zone_stat()

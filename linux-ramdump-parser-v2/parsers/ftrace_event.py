@@ -1,4 +1,4 @@
-# Copyright (c) 2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -597,7 +597,7 @@ class FtraceParser_Event(object):
                         v = self.ramdump.read_u64(ftrace_raw_entry + offset)
                     else:
                         v = self.ramdump.read_u32(ftrace_raw_entry + offset)
-                    if "function" not in item:
+                    if "func" not in item:
                         fmt_name_value_map[item] = hex(int(v))
                     else:
                         fmt_name_value_map[item] = v
@@ -631,6 +631,12 @@ class FtraceParser_Event(object):
                     if "function" == keyinfo:
                         wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
                         tt = keyinfo + "=" + wq_function1
+                    if "func" == keyinfo:
+                        wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
+                        if wq_function1 and len(wq_function1) > 1 and wq_function1 != 'No':
+                            tt = keyinfo + "=" + wq_function1
+                        else:
+                            tt = keyinfo + "=" + str(hex(fmt_name_value_map[keyinfo]))
                     else:
                         tt = keyinfo + "=" + str(fmt_name_value_map[keyinfo])
                     temp = temp + tt + "  "

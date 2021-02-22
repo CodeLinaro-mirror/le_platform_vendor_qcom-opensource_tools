@@ -46,6 +46,7 @@ class SdeDbgBase(Struct):
     _struct_name = "struct sde_dbg_base"
     _fields = {
             'evtlog': Struct.get_pointer,
+            'reglog': Struct.get_pointer,
             'reg_base_list': Struct.get_pointer,
             'enable_reg_dump' : Struct.get_u32,
             'panic_on_err' : Struct.get_u32,
@@ -2603,7 +2604,53 @@ class MDPinfo(RamParser):
             self.ramdump.remove_file('reg_stage_1.txt')
             self.ramdump.remove_file('reg_stage_2.txt')
             self.ramdump.remove_file('reg_stage_3.txt')
-
+            try:
+                self.outfile = self.ramdump.open_file('sde_reglog.txt')
+                reg_log = Struct(self.ramdump, mdss_dbg.reglog,
+                          struct_name="struct sde_dbg_reglog",
+                          fields={'enable': Struct.get_u32,
+                                  'last': Struct.get_u32,
+                                  'curr': Struct.get_u32,
+                                  'logs': Struct.get_address,
+                                  'last_dump': Struct.get_u32})
+                SDE_REGLOG_ENTRY = 1024
+                self.outfile.write('%-21.5s%-11.5s%-13.7s%-13.5s%s\n' % ("TIME", "PID", "ADDRESS", "VAL", "BLK_ID"))
+                sde_reglog_start = 0
+                sde_reglog_repeat = 0
+                if (reg_log.curr != reg_log.last):
+                    sde_reglog_start = reg_log.curr
+                else:
+                    sde_reglog_repeat = 1
+                sde_reglog_count = 0
+                while (sde_reglog_count < SDE_REGLOG_ENTRY):
+                    i = sde_reglog_start % SDE_REGLOG_ENTRY
+                    if (i == reg_log.curr):
+                        if (sde_reglog_repeat):
+                            break
+                        else:
+                            sde_reglog_repeat = 1
+                    addr = reg_log.logs + self.ramdump.sizeof('struct sde_dbg_reglog_log') * i
+                    log_log = addr
+                    sde_reglog_start = sde_reglog_start + 1
+                    sde_reglog_count = sde_reglog_count + 1
+                    log_log = Struct(self.ramdump, log_log,
+                                     struct_name="struct sde_dbg_reglog_log",
+                                     fields={'time':Struct.get_u64,
+                                            'pid':Struct.get_u32,
+                                            'addr':Struct.get_u32,
+                                            'val':Struct.get_u32,
+                                            'blk_id':Struct.get_u8})
+                    if (log_log.time == 0x0):
+                        break
+                    self.outfile.write('%-20.5d ' % (log_log.time))
+                    self.outfile.write('%-10.1d ' % (log_log.pid))
+                    self.outfile.write('0x%-10.1x ' % (log_log.addr))
+                    self.outfile.write('0x%-10.1x ' % (log_log.val))
+                    self.outfile.write('0x%-10.1x ' % (log_log.blk_id))
+                    self.outfile.write('\n')
+                self.outfile.close()
+            except:
+                pass
         else:
             for blk in mdss_dbg.blk_arr:
                 if blk.is_empty():

@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -120,7 +120,10 @@ class struct_member_offset(object):
 
         self.page_objects = ramdump.field_offset(
                             'struct page', 'objects')
-
+        self.track_cpu = ramdump.field_offset(
+                            'struct track', 'cpu')
+        self.track_when = ramdump.field_offset(
+                            'struct track', 'when')
         self.track_addrs = ramdump.field_offset(
                             'struct track', 'addrs')
         self.track_pid = ramdump.field_offset(
@@ -345,6 +348,42 @@ class Slabinfo(RamParser):
         self.print_slab(
             self.ramdump, slab, page, out_file, map_fn, out_slabs_addrs)
 
+    def print_objects_detail(self, ramdump, slab, obj, type):
+        stack = []
+        p = self.get_track(ramdump, slab, obj, type)
+        track_addrs_offset = g_offsetof.track_addrs
+        start = p + track_addrs_offset
+        pointer_size = g_offsetof.sizeof_unsignedlong
+
+        pid = self.ramdump.read_int(p + g_offsetof.track_pid)
+        if pid is None:
+            pid = -1
+        when = self.ramdump.read_ulong(p + g_offsetof.track_when)
+        if when is None:
+            when = 0
+        cpu = self.ramdump.read_int(p + g_offsetof.track_cpu)
+        if cpu is None:
+            cpu = -1
+        print("object 0x%x cpu %d pid %d when %d" % (obj, cpu, pid, when), file=self.slabs_object_out)
+        if type == 0:
+            print("ALLOCATED", file=self.slabs_object_out)
+        else:
+            print("FREE", file=self.slabs_object_out)
+        for i in range(0, 16):
+            a = self.ramdump.read_word(start + pointer_size * i)
+            if a == 0:
+                continue
+            stack += [a]
+
+        for a in stack:
+            look = ramdump.unwind_lookup(a)
+            if look is None:
+                self.slabs_object_out.write("Unknown symbol\n")
+                continue
+            symname, offset = look
+            self.slabs_object_out.write(
+                '      [<{0:x}>] {1}+0x{2:x}\n'.format(a, symname, offset))
+
     def print_all_objects(
         self, ramdump, p, free, slab, page,
             out_file, out_slabs_addrs):
@@ -362,6 +401,8 @@ class Slabinfo(RamParser):
             if g_Optimization is False:
                 self.print_track(ramdump, slab, p, 0, out_file)
                 self.print_track(ramdump, slab, p, 1, out_file)
+                self.print_objects_detail(ramdump, slab, p, 0)
+                self.print_objects_detail(ramdump, slab, p, 1)
             else:
                 self.print_track(ramdump, slab, p, free, out_file)
 
@@ -447,6 +488,10 @@ class Slabinfo(RamParser):
             slab_out.write(
                 '\n {0:x} slab {1} {2:x}  total objects: {3}\n'.format(
                         slab, slab_name, slab_node_addr, nr_total_objects))
+
+            self.slabs_object_out.write(
+                '\n {0:x} slab {1} {2:x}  total objects: {3}\n'.format(
+                    slab, slab_name, slab_node_addr, nr_total_objects))
 
             self.print_slab_page_info(
                 self.ramdump, slab_obj, slab_node,
@@ -562,7 +607,9 @@ class Slabinfo(RamParser):
             if 'perf_off' in arg:
                 g_Optimization = False
         slab_out = self.ramdump.open_file('slabs.txt')
+        self.slabs_object_out = self.ramdump.open_file('slabs_object.txt')
         self.validate_slab_cache(slab_out, slabname, self.print_all_objects)
+        self.slabs_object_out.close()
         slab_out.close()
 
 

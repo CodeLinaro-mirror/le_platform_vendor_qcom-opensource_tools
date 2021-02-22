@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2015, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2015, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -80,13 +80,14 @@ class ROData(RamParser):
 
                         ram_values = self.ramdump.read_physical(self.ramdump.virt_to_phys(count), max_read_size)
                         vm_values = fd.read(max_read_size)
-                        if ram_values != vm_values:
+                        if ram_values and ram_values != vm_values:
                             detect = 0xFFFFFFFF
                             print_out_str(
                                 'Differences found! Differences written to roareadiff.txt')
                             i = 0
                             while i < max_read_size:
-                                ram_value = struct.unpack_from('I', ram_values, i)[0]
+                                try:
+                                    ram_value = struct.unpack_from('I', ram_values, i)[0]
                                 vm_value = struct.unpack_from('I', vm_values, i)[0]
 
                                 if detect == 64:
@@ -131,6 +132,8 @@ class ROData(RamParser):
                                         vm_ascii += c if c in string.printable else '.'
                                     detect += 1
                                 i = i + 4
+                                except Exception as err:
+                                    roarea_out.write("Failed roaddress = {0}".format(count))
                             if detect != 0xFFFFFFFF:
                                 ddr_str += '          ' * (7 - ((detect - 1) % 8)) + ddr_ascii + '\n\n'
                                 vmlinux_str += '          ' * (7 - ((detect - 1) % 8)) + vm_ascii + '\n\n'

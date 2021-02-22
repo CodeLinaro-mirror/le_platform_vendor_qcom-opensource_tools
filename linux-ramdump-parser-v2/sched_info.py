@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -16,6 +16,7 @@ DEFAULT_MIGRATION_NR=32
 DEFAULT_MIGRATION_COST=500000
 DEFAULT_RT_PERIOD=1000000
 DEFAULT_RT_RUNTIME=950000
+SCHED_CAPACITY_SHIFT=10
 
 cpu_online_bits = 0
 
@@ -34,13 +35,8 @@ def verify_active_cpus(ramdump):
 
     if (ramdump.kernel_version >= (4, 19, 0)):
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'package_id')
-        core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_possible_sibling')
-        # if possible sibling mask is not present, active cpu verification is not worthy.
-        if core_sib_off is None:
-            return
     else:
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'cluster_id')
-        core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_sibling')
 
     nr_cpus = ramdump.get_num_cpus()
 
@@ -58,7 +54,10 @@ def verify_active_cpus(ramdump):
         online = ramdump.read_int(rq_addr + online_offset)
         cpu_online_bits |= (online << i)
 
-    if (ramdump.kernel_version >= (4, 9, 0)):
+    print("cpu_online_bits.. {0}".format(cpu_online_bits))
+    if (ramdump.kernel_version >= (5, 10, 0)):
+        cpu_isolated_bits = ramdump.read_word('__cpu_active_mask')
+    elif (ramdump.kernel_version >= (4, 9, 0)):
         cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
     elif (ramdump.kernel_version >= (4, 4, 0)):
         cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
@@ -69,26 +68,20 @@ def verify_active_cpus(ramdump):
     # INFO: from 4.19 onwards, core_sibling mask contains only online cpus,
     #       find out cluster cpus dynamically.
 
-    cluster_nrcpus = [0]
+    cluster_cpus = [0]
     for j in range(0, nr_cpus):
         c_id = ramdump.read_int(cpu_topology_addr + (j * cpu_topology_size) + cluster_id_off)
-        if len(cluster_nrcpus) <= c_id :
-            cluster_nrcpus.extend([0])
-        cluster_nrcpus[c_id] += 1
+        if len(cluster_cpus) <= c_id :
+            cluster_cpus.extend([0])
+        cluster_cpus[c_id] |= (1 << j)
 
-    next_cluster_cpu = 0
-    for i in range(0, len(cluster_nrcpus)):
-        cluster_cpus = ramdump.read_word(cpu_topology_addr +
-                                        (next_cluster_cpu * cpu_topology_size) + core_sib_off)
-        cluster_online_cpus = cpu_online_bits & cluster_cpus
+    for i in range(0, len(cluster_cpus)):
+        cluster_online_cpus = cpu_online_bits & cluster_cpus[i]
         cluster_nr_oncpus = bin(cluster_online_cpus).count('1')
-        cluster_isolated_cpus = cpu_isolated_bits & cluster_cpus
+        cluster_isolated_cpus = cpu_isolated_bits & cluster_cpus[i]
         cluster_nr_isocpus = bin(cluster_isolated_cpus).count('1')
 
-        #print_out_str("Cluster fist cpu {0} cpu_mask {1:b}".format(next_cluster_cpu , cluster_cpus))
-        next_cluster_cpu += cluster_nrcpus[i]
-
-        if (cluster_nrcpus[i] > 2):
+        if (bin(cluster_cpus[i]).count('1') > 2):
             min_req_cpus = 2
         else:
             min_req_cpus = 1
@@ -97,11 +90,12 @@ def verify_active_cpus(ramdump):
                 print_out_str("\n" + "*" * 10 + " WARNING " + "*" * 10 + "\n")
                 print_out_str("\tMinimum active cpus are not available in the cluster {0}\n".format(i))
 
-                print_out_str("\tCluster cpus: {0}  Online cpus: {1} Isolated cpus: {2}\n".format(
-                                mask_bitset_pos(cluster_cpus),
-                                mask_bitset_pos(cluster_online_cpus),
-                                mask_bitset_pos(cluster_isolated_cpus)))
                 print_out_str("*" * 10 + " WARNING " + "*" * 10 + "\n")
+        print_out_str("\tCluster cpus: {0}  Online cpus: {1} Isolated cpus: {2} nr_cpu: {3}\n".format(
+                        mask_bitset_pos(cluster_cpus[i]),
+                        mask_bitset_pos(cluster_online_cpus),
+                        mask_bitset_pos(cluster_isolated_cpus),
+                        bin(cluster_cpus[i]).count('1')))
 
 def dump_cpufreq_data(ramdump):
     cpufreq_data_addr = ramdump.address_of('cpufreq_cpu_data')
@@ -125,7 +119,12 @@ def dump_cpufreq_data(ramdump):
 
         cap_orig = ramdump.read_structure_field(rq_addr, 'struct rq', 'cpu_capacity_orig')
         curr_cap = ramdump.read_structure_field(rq_addr, 'struct rq', 'cpu_capacity')
-        thermal_cap = ramdump.read_word(ramdump.array_index(ramdump.address_of('thermal_cap_cpu'), 'unsigned long', i))
+        if (ramdump.kernel_version >= (5, 10, 0)):
+            max_thermal_cap = (1 << SCHED_CAPACITY_SHIFT)
+            thermal_pressure = ramdump.read_u64(ramdump.address_of('thermal_pressure') + ramdump.per_cpu_offset(i))
+            thermal_cap = max_thermal_cap - thermal_pressure
+        else:
+            thermal_cap = ramdump.read_word(ramdump.array_index(ramdump.address_of('thermal_cap_cpu'), 'unsigned long', i))
 
         arch_scale = ramdump.read_int(ramdump.address_of('cpu_scale') + ramdump.per_cpu_offset(i))
 

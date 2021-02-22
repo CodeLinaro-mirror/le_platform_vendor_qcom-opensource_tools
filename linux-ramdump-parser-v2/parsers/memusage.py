@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -86,7 +86,11 @@ def do_dump_process_memory(ramdump):
     else:
         total_free = ramdump.read_word('vm_zone_stat[NR_FREE_PAGES]')
         # slab memory
-        if ramdump.kernel_version >= (4, 14):
+        if ramdump.kernel_version >= (5, 10):
+            slab_rec = ramdump.read_word('vm_node_stat[NR_SLAB_RECLAIMABLE_B]')
+            slab_unrec = ramdump.read_word(
+                            'vm_node_stat[NR_SLAB_UNRECLAIMABLE_B]')
+        elif ramdump.kernel_version >= (4, 14):
             slab_rec = ramdump.read_word('vm_node_stat[NR_SLAB_RECLAIMABLE]')
             slab_unrec = ramdump.read_word(
                             'vm_node_stat[NR_SLAB_UNRECLAIMABLE]')

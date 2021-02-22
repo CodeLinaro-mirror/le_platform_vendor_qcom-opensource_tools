@@ -587,6 +587,7 @@ class RamDump():
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
         self.hyp = options.hyp
+        self.lookup_table = []
         # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
         if options.mod_path_list:
             for path in options.mod_path_list:
@@ -693,7 +694,6 @@ class RamDump():
             self.gdbmi.kaslr_offset = self.get_kaslr_offset()
 
         self.wlan = options.wlan
-        self.lookup_table = []
         self.config = []
         self.config_dict = {}
         if self.arm64:
@@ -1267,7 +1267,7 @@ class RamDump():
             mod_sym_path = mod_tbl_ent.get_sym_path()
             if mod_sym_path != '':
                 where = os.path.abspath(mod_sym_path)
-                ld_mod_sym = 'task.symbol.loadmod "{}"\n'.format(where)
+                ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
                 startup_script.write(ld_mod_sym)
 
         if not self.minidump:
@@ -1558,10 +1558,15 @@ class RamDump():
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
     def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
-        if mod_tbl_ent.name not in ko_file_list:
+        name_index = [s for s in ko_file_list.keys() if mod_tbl_ent.name in s]
+        if len(name_index) == 0:
             print_out_str('!! Object not found for {}'.format(mod_tbl_ent.name))
             return
 
+        if mod_tbl_ent.name not in ko_file_list and name_index[0] in ko_file_list:
+            temp_data = ko_file_list[name_index[0]]
+            del ko_file_list[name_index[0]]
+            ko_file_list[mod_tbl_ent.name] = temp_data
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
 
@@ -1609,7 +1614,7 @@ class RamDump():
                     # being treated as belonging to a particular kernel module
                     mod_tbl_ent.kallsyms_table.append(
                         (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
-                         st_name, st_shndx, st_size))
+                         st_name, st_shndx, st_size,sym_name))
             mod_tbl_ent.kallsyms_table.sort()
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
@@ -1646,6 +1651,7 @@ class RamDump():
                 else:
                     return
                 name = os.path.basename(name)
+                name = name.replace("-","_")
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
@@ -1659,7 +1665,7 @@ class RamDump():
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
-                    self.lookup_table.append((sym[0], sym[1]))
+                    self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.sym_lookup_table:
@@ -1708,7 +1714,15 @@ class RamDump():
         '0xffffffc000c7a0a8L'
         """
         try:
-            return self.gdbmi.address_of(symbol)
+            addr = self.gdbmi.address_of(symbol)
+            if ((addr & 0xFF000000000000) == 0) and self.arm64:
+                for mod_tbl_ent in self.lookup_table:
+                    if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
+                        addr = mod_tbl_ent[0]
+                        return addr
+                return addr
+            else:
+                return addr
         except gdbmi.GdbMIException:
             pass
 
