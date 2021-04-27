@@ -168,6 +168,7 @@ class DmesgLib(object):
         next_off = off + self.ramdump.field_offset(
                                         'struct prb_data_blk_lpos', 'next')
         ts_off = self.ramdump.field_offset('struct printk_info', 'ts_nsec')
+        callerid_off = self.ramdump.field_offset('struct printk_info', 'caller_id')
         len_off = self.ramdump.field_offset('struct printk_info', 'text_len')
 
         desc_committed = 1
@@ -214,17 +215,26 @@ class DmesgLib(object):
 
                 if end - text_start < text_len:
                     text_len = end - text_start
+                if text_len < 0:
+                    text_len = 0
 
                 text = self.ramdump.read_cstring(data_addr +
                                                     text_start, text_len)
 
             time_stamp = self.ramdump.read_u64(infos_addr +
                                                     info_off + ts_off)
+            caller_data = self.ramdump.read_u32(infos_addr +
+                                                    info_off + callerid_off)
+            tid_info = "T"
+            if (caller_data & 0x80000000):
+                tid_info = "C"
 
+            caller_id_data = caller_data & ~0x80000000
+            caller_id_data = tid_info + str(caller_id_data)
             for line in text.splitlines():
-                msg = u"[{time:12.6f}] {line}\n".format(
+                msg = u"[{time:12.6f}][{caller_id_data:>6}] {line}\n".format(
                     time=time_stamp / 1000000000.0,
-                    line=line)
+                    line=line,caller_id_data=caller_id_data)
                 self.outfile.write(msg)
 
             if did == head_id:

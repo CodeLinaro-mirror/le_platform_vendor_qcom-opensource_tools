@@ -109,7 +109,9 @@ class MemStats(RamParser):
         return other_mem
 
     def calculate_ionmem(self):
-        if self.ramdump.kernel_version >= (5, 4):
+        if self.ramdump.kernel_version >= (5, 10):
+            grandtotal = 0
+        elif self.ramdump.kernel_version >= (5, 4):
             grandtotal = self.ramdump.read_u64('total_heap_bytes')
         else:
             number_of_ion_heaps = self.ramdump.read_int('num_heaps')
@@ -283,7 +285,10 @@ class MemStats(RamParser):
                             "Free memory:", total_free))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Total Slab memory:", total_slab))
-        out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
+        if self.ramdump.kernel_version >= (5, 10):
+            out_mem_stat.write('\nTotal ion memory: Please refer total_dma_heap.txt')
+        else:
+            out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Total ion memory:", ion_mem))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "KGSL ", kgsl_memory))

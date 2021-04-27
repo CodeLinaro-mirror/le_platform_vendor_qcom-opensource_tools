@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -304,7 +304,7 @@ class DebugImage_v2():
                         break
                     regset_name = msm_dump_regset_ids[regset_id]
                     print_out_str("regset_name = {0}".format(regset_name))
-                    regset_addr = ram_dump.read_u32(registers_addr + regset_addr_offset,False)
+                    regset_addr = ram_dump.read_u64(registers_addr + regset_addr_offset,False)
                     regset_size = ram_dump.sizeof('struct msm_dump_aarch64_gprs')
                     if regset_size is None:
                         regset_size = 0x110
@@ -947,8 +947,12 @@ class DebugImage_v2():
             with a table for a crashed guest. So the value from IMEM may
             not match the value saved in the linux variable 'memdump'.
             """
+            if hasattr(ram_dump.board, 'imem_offset_memdump_table'):
+                imem_dump_table_offset = ram_dump.board.imem_offset_memdump_table
+            else:
+                imem_dump_table_offset = IMEM_OFFSET_MEM_DUMP_TABLE
             table_phys = ram_dump.read_word(
-                ram_dump.board.imem_start + IMEM_OFFSET_MEM_DUMP_TABLE,
+                ram_dump.board.imem_start + imem_dump_table_offset,
                 virtual = False)
             root_table = self.validateMsmDumpTable(ram_dump, "IMEM", table_phys)
 
@@ -993,7 +997,7 @@ class DebugImage_v2():
                     return
                 table_num_entries = ram_dump.read_u32(
                     entry_addr + dump_table_num_entry_offset, False)
-                if table_num_entries is None or table_num_entries > 100:
+                if table_num_entries is None or table_num_entries > MAX_NUM_ENTRIES:
                     print_out_str('Dump table entry num_entries is bogus! Can\'t parse debug image')
                     return
 

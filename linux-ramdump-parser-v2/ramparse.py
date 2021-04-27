@@ -281,8 +281,11 @@ if __name__ == '__main__':
     try:
         import local_settings
         try:
+            gdb_ndk_path = None
             if options.arm64:
                 gdb_path = gdb_path or local_settings.gdb64_path
+                if hasattr(local_settings, 'gdb64_ndk_path'):
+                    gdb_ndk_path = local_settings.gdb64_ndk_path
                 nm_path = nm_path or local_settings.nm64_path
                 objdump_path = objdump_path or local_settings.objdump64_path
             else:
@@ -332,7 +335,7 @@ if __name__ == '__main__':
     if options.everything:
         options.qtf = True
 
-    dump = RamDump(options, nm_path, gdb_path, objdump_path)
+    dump = RamDump(options, nm_path, gdb_path, objdump_path,gdb_ndk_path)
 
     if options.eval:
         if options.eval == '-':
@@ -397,8 +400,10 @@ if __name__ == '__main__':
 
     # Always verify Scheduler requirement for active_cpus on 64-bit platforms.
     if options.arm64:
-        verify_active_cpus(dump)
-
+        try:
+            verify_active_cpus(dump)
+        except Exception as err:
+            print_out_str('Unable to extract active cpus  info')
     # we called parser.add_option with dest=p.cls.__name__ above,
     # so if the user passed that option then `options' will have a
     # p.cls.__name__ attribute.

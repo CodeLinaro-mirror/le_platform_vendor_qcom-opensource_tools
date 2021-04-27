@@ -1,4 +1,4 @@
-# Copyright (c) 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -10,7 +10,7 @@
 # GNU General Public License for more details.
 
 from parser_util import register_parser, RamParser, cleanupString
-from mmu import Armv8MMU
+from mmu import Armv8MMU, Armv7MMU
 from print_out import print_out_str
 import struct
 import linecache
@@ -125,12 +125,16 @@ def parse_logcat_v2(ramdump):
     dentry_offset = ramdump.field_offset('struct path', 'dentry')
     d_iname_offset = ramdump.field_offset('struct dentry', 'd_iname')
 
-    first_node_offset  = 0x10
-    next_node_offset   = 0x08
-    element_obj_offset = 0x10
+    if ramdump.arm64:
+        addr_length    = 8
+    else:
+        addr_length    = 4
+
+    first_node_offset  = addr_length * 2
+    next_node_offset   = addr_length
+    element_obj_offset = addr_length * 2
     msg_addr_offset    = 0x14
-    msg_size_offset    = 0x1C
-    LogBufferElement_size = 0x24
+    msg_size_offset    = msg_addr_offset + addr_length
 
     logdaddr = 0
     bss_start = 0
@@ -155,7 +159,7 @@ def parse_logcat_v2(ramdump):
                 if (end_data > tmpstartVm) and (end_data < tmpendVm):
                     # android P and older : 3 logd vma, bss section is just after end_data
                     if logd_count < 3:
-                        # data section is 4bytes align while bss section is 8bytes align
+                        # data section is 4bytes align while bss section is 8 bytes align
                         bss_start = (end_data + 7) & 0x000000fffffffff8
                     else:
                         # android Q: 2 code vma + 2 data vma + 1bss, bss section is individual vma after end_data
@@ -163,23 +167,29 @@ def parse_logcat_v2(ramdump):
                             logdmap   = ramdump.read_structure_field(logdmap, 'struct vm_area_struct', 'vm_next')
                             bss_start = ramdump.read_structure_field(logdmap, 'struct vm_area_struct', 'vm_start')
                         else:
-                            # android R: 3 code vma and 1 data+bss vma, bss section is just after end_data, both data section and bss section is 8bytes align
-                            bss_start = end_data
-                            first_node_offset = 0x08
+                            # android R: 3 code vma and 1 data+bss vma, bss section is just after end_data, data section is addr_length align and bss section is 8 bytes align
+                            if ramdump.arm64:
+                                bss_start = end_data
+                            else:
+                                bss_start = (end_data + 7) & 0xfffffff8
+                            first_node_offset = addr_length
                     print_out_str("bss_start: 0x%x\n" %(bss_start))
                     break
                 logdmap = ramdump.read_structure_field(logdmap, 'struct vm_area_struct', 'vm_next')
 
             break
 
-    mmu = Armv8MMU(ramdump, pgdp)
+    if ramdump.arm64:
+        mmu = Armv8MMU(ramdump, pgdp)
+    else:
+        mmu = Armv7MMU(ramdump, pgdp)
 
     logbuf_offset = parse_logBuf_offset(ramdump);
     print_out_str("logbuf_offset = 0x%x" %(logbuf_offset))
-    logbuf_addr = read_bytes(mmu, ramdump, bss_start + logbuf_offset, 8)
+    logbuf_addr = read_bytes(mmu, ramdump, bss_start + logbuf_offset, addr_length)
     print_out_str("logbuf_addr = 0x%x" %(logbuf_addr))
 
-    first_node_addr = read_bytes(mmu, ramdump, logbuf_addr + first_node_offset, 8)
+    first_node_addr = read_bytes(mmu, ramdump, logbuf_addr + first_node_offset, addr_length)
     next_node_addr = first_node_addr
     if next_node_addr is not None:
         print_out_str("first_node_addr = 0x%x\n" %(next_node_addr))
@@ -200,8 +210,11 @@ def parse_logcat_v2(ramdump):
         log_file[index].write("\n")
         index = index + 1
     while next_node_addr != 0:
-        logbuffer_ele_obj = read_bytes(mmu, ramdump, next_node_addr + element_obj_offset, 8)
-        next_node_addr = read_bytes(mmu, ramdump, next_node_addr + next_node_offset, 8)
+        logbuffer_ele_obj = read_bytes(mmu, ramdump, next_node_addr + element_obj_offset, addr_length)
+        next_node_addr = read_bytes(mmu, ramdump, next_node_addr + next_node_offset, addr_length)
+        if next_node_addr == first_node_addr:
+            break
+
         logbuffer_ele_obj_phys = mmu.virt_to_phys(logbuffer_ele_obj)
 
         ## uid pid tid and etc parsed from LogBufferElement
@@ -210,10 +223,11 @@ def parse_logcat_v2(ramdump):
         tid = read_bytes(mmu, ramdump, logbuffer_ele_obj + 0x8, 4)
         tv_second = read_bytes(mmu, ramdump, logbuffer_ele_obj + 0xC, 4)
         tv_second_nano = read_bytes(mmu, ramdump, logbuffer_ele_obj + 0x10, 4)
-        msg_addr = read_bytes(mmu, ramdump, logbuffer_ele_obj + msg_addr_offset, 8)
+        msg_addr = read_bytes(mmu, ramdump, logbuffer_ele_obj + msg_addr_offset, addr_length)
         msg_size = read_bytes(mmu, ramdump, logbuffer_ele_obj + msg_size_offset, 2)
-        log_id   = read_bytes(mmu, ramdump, logbuffer_ele_obj + msg_size_offset + 0x2, 2)
-        if log_id == 2:
+        log_id   = read_bytes(mmu, ramdump, logbuffer_ele_obj + msg_size_offset + 0x2, 1)
+        dropped  = read_bytes(mmu, ramdump, logbuffer_ele_obj + msg_size_offset + 0x3, 1)
+        if (log_id == 2) or (dropped == 1) :
             continue
 
         if logbuffer_ele_obj_phys is None or msg_size == 0:

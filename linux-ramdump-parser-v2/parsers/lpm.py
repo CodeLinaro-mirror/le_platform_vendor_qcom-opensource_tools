@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2018, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2015-2018, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -143,12 +143,71 @@ class lpm(RamParser):
                 return
         self.clusters.append(lpm_cluster)
 
+    def get_pm_domains(self):
+
+        gpd_offset = self.ramdump.field_offset('struct generic_pm_domain', 'gpd_list_node')
+        head = self.ramdump.read_word(self.ramdump.address_of('gpd_list'), True)
+        self.head = head
+
+        gpd_walker = linux_list.ListWalker(self.ramdump, head, gpd_offset)
+        gpd_walker.walk(head, self.get_pm_domain_info)
+
+    def get_pm_domain_info(self, node):
+        if node == self.head:
+            return
+
+        name_offset = self.ramdump.field_offset('struct generic_pm_domain', 'name')
+        name = self.ramdump.read_cstring(self.ramdump.read_word(node + name_offset))
+        if not name:
+            return
+        name += ":idle_states:S{}"
+
+        state_count = self.ramdump.read_structure_field(node, 'struct generic_pm_domain', 'state_count')
+        accounting_time = self.ramdump.read_structure_field(node, 'struct generic_pm_domain', 'accounting_time')
+        gpd_power_state_size = self.ramdump.sizeof('struct genpd_power_state')
+        power_state_offset = self.ramdump.field_offset('struct generic_pm_domain', 'states')
+
+
+        for i in range(state_count):
+            power_state_addr = self.ramdump.read_word(node + power_state_offset + i * gpd_power_state_size)
+
+            msec = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state', 'idle_time')
+            ktime = self.ramdump.read_s64('last_jiffies_update') - accounting_time
+            ktime = ktime // 10 ** 6
+
+            if msec:
+                msec += ktime
+            usage = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state', 'usage')
+            rejected = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state', 'rejected')
+            residency_ns = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state','residency_ns')
+
+
+            if not msec:
+                msec = "0"
+            if not usage:
+                usage = "0"
+            if not rejected:
+                rejected = "0"
+            if name:
+                msg = u"{name:30}  {msec:30}  {usage:30} {rejected:30}".format(name=name.format(i),msec=msec,usage=usage,rejected=rejected)
+                self.output.append(msg)
+
+            self.output.append("\n")
+
+        return
+
+    def print_pm_domain_info(self):
+        self.output.append("{}\n".format('Power Domain Info: '))
+        self.output.append("{:30}{:30}{:30}{:30} \n".format("Power domain", "Time Spent(msec)", "Usage ", "Rejected "))
+        self.get_pm_domains()
+        self.output.append("{}{}".format("-" * 81, "\n"))
+
     def get_clusters(self):
         lpm_root_node = self.ramdump.read_word(
             self.ramdump.address_of('lpm_root_node'), True)
         if lpm_root_node is None:
-                self.output_file.write("NOTE: 'lpm_root_node' not found\n")
-                return
+            self.output_file.write("NOTE: 'lpm_root_node' not found\n")
+            return
 
         self.clusters.append(lpm_root_node)
 
@@ -389,6 +448,7 @@ class lpm(RamParser):
         self.get_stats()
         self.get_debug_phys()
         self.print_debug_phys()
+        self.print_pm_domain_info()
         for i in self.output:
                 self.output_file.write(i)
         self.output_file.close()

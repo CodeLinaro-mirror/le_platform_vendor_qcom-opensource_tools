@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -142,19 +142,40 @@ class FtraceParser(RamParser):
         global_trace_data_org = self.ramdump.address_of('ftrace_trace_arrays')
         global_trace_data_offset = self.ramdump.field_offset(
             'struct list_head ', 'next')
-        global_trace_data_next = self.ramdump.read_u64(global_trace_data_org + global_trace_data_offset)
+        if self.ramdump.arm64:
+            global_trace_data_next = self.ramdump.read_u64(global_trace_data_org + global_trace_data_offset)
+        else:
+            global_trace_data_next = self.ramdump.read_u32(global_trace_data_org + global_trace_data_offset)
         while(global_trace_data_org != global_trace_data_next):
             global_trace_data = global_trace_data_next
-            trace_buffer_ptr = self.ramdump.field_offset(
-                'struct trace_array', 'trace_buffer')
+            if self.ramdump.kernel_version >= (5, 10):
+                trace_buffer_ptr = self.ramdump.field_offset(
+                    'struct trace_array', 'array_buffer')
+            else:
+                trace_buffer_ptr = self.ramdump.field_offset(
+                    'struct trace_array', 'trace_buffer')
             trace_buffer_name_offset = self.ramdump.field_offset(
                 'struct trace_array', 'name')
-            ring_trace_buffer_ptr = self.ramdump.field_offset(
-                'struct trace_buffer', 'buffer')
-            ring_trace_buffer_cpus_ptr = self.ramdump.frame_field_offset(
-                'rb_wake_up_waiters','struct ring_buffer', 'cpus')
-            ring_trace_buffer_base_addr = self.ramdump.frame_field_offset(
-                'rb_wake_up_waiters','struct ring_buffer', 'buffers')
+            if self.ramdump.kernel_version >= (5, 10):
+                ring_trace_buffer_ptr = self.ramdump.field_offset(
+                    'struct array_buffer', 'buffer')
+            else:
+                ring_trace_buffer_ptr = self.ramdump.field_offset(
+                    'struct trace_buffer', 'buffer')
+            if self.ramdump.kernel_version >= (5, 10):
+                ring_trace_buffer_cpus_ptr = self.ramdump.field_offset(
+                    'struct trace_buffer', 'cpus')
+                ring_trace_buffer_base_addr = self.ramdump.field_offset(
+                    'struct trace_buffer', 'buffers')
+            else:
+                ring_trace_buffer_cpus_ptr = self.ramdump.frame_field_offset(
+                    'rb_wake_up_waiters','struct ring_buffer', 'cpus')
+                if ring_trace_buffer_cpus_ptr is None:
+                    ring_trace_buffer_cpus_ptr = 0x4
+                ring_trace_buffer_base_addr = self.ramdump.frame_field_offset(
+                    'rb_wake_up_waiters','struct ring_buffer', 'buffers')
+                if ring_trace_buffer_base_addr is None:
+                    ring_trace_buffer_base_addr = 0x58
             ring_trace_buffer_nr_pages = self.ramdump.field_offset(
                 'struct ring_buffer_per_cpu', 'nr_pages')
 
@@ -217,7 +238,8 @@ class FtraceParser(RamParser):
                     b = self.ramdump.read_u64(array_ptr)
                 else:
                     b = self.ramdump.read_u32(array_ptr)
-                #print "b = {0}".format(hex(b))
+                if b is None or b == 0x0:
+                    continue
                 if self.ramdump.arm64:
                     nr_pages =  self.ramdump.read_u64(
                         b + ring_trace_buffer_nr_pages)
@@ -242,14 +264,17 @@ class FtraceParser(RamParser):
 
             self.formats_out.close
 
-            for cpu_idx in range(0, 8):
+            for cpu_idx in range(0,len(rb_per_cpu)):
                 nr_pages_per_buffer_item = nr_pages_per_buffer[cpu_idx]
                 per_cpu_buffer = rb_per_cpu[cpu_idx]
                 if per_cpu_buffer is not None:
                     evt = FtraceParser_Event(self.ramdump,ftrace_out,cpu_idx,per_cpu_buffer,nr_pages_per_buffer_item,nr_total_buffer_pages
                                        ,fevent_list.ftrace_event_type,fevent_list.ftrace_raw_struct_type,ftrace_time_data,self.fromat_event_map)
                     evt.ftrace_event_parsing()
-            global_trace_data_next =  self.ramdump.read_u64(global_trace_data_next)
+            if self.ramdump.arm64:
+                global_trace_data_next =  self.ramdump.read_u64(global_trace_data_next)
+            else:
+                global_trace_data_next =  self.ramdump.read_u32(global_trace_data_next)
             swapper_entry = False
             prev_comm = None
             curr_comm = None

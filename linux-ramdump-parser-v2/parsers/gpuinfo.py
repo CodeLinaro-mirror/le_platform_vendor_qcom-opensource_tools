@@ -82,6 +82,8 @@ class GpuParser(RamParser):
                 "No GPU support detected... Skipping GPU parser.")
             return
 
+        self.devp = self.ramdump.read_pointer('kgsl_driver.devp')
+
         if (self.ramdump.kernel_version == (0, 0, 0) or
            self.ramdump.kernel_version >= (5, 4, 0)):
             self.parser_list = self.parser_list_54
@@ -138,8 +140,7 @@ class GpuParser(RamParser):
         format_str = '{0:20} {1:20} {2:20} {3:30}'
         self.writeln(format_str.format("CONTEXT ID", "PID", "PROCESS_NAME",
                                        "ADRENO_DRAW_CONTEXT_PTR"))
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        context_idr = dump.struct_field_addr(device_3d0, 'struct kgsl_device',
+        context_idr = dump.struct_field_addr(self.devp, 'struct kgsl_device',
                                              'context_idr')
         self.rtw.walk_radix_tree(context_idr, self.print_context_data)
 
@@ -148,7 +149,7 @@ class GpuParser(RamParser):
         self.writeln(format_str.format("CONTEXT ID", "PID", "PROCESS_NAME",
                                        "ADRENO_DRAW_CONTEXT_PTR"))
         device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        node_addr = dump.struct_field_addr(device_3d0, 'struct adreno_device',
+        node_addr = dump.struct_field_addr(self.devp, 'struct adreno_device',
                                            'active_list')
         list_elem_offset = dump.field_offset('struct adreno_context',
                                              'active_node')
@@ -254,56 +255,55 @@ class GpuParser(RamParser):
         self.writeln('prev_rb_id: ' + str(prev_rb_id))
 
     def parse_kgsl_data_54(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        open_count = dump.read_structure_field(device_3d0,
+        open_count = dump.read_structure_field(self.devp,
                                                'struct kgsl_device',
                                                'open_count')
-        state = dump.read_structure_field(device_3d0,
+        state = dump.read_structure_field(self.devp,
                                           'struct kgsl_device', 'state')
-        requested_state = dump.read_structure_field(device_3d0,
+        requested_state = dump.read_structure_field(self.devp,
                                                     'struct kgsl_device',
                                                     'requested_state')
-        reg_phys = dump.read_structure_field(device_3d0,
+        reg_phys = dump.read_structure_field(self.devp,
                                              'struct kgsl_device', 'reg_phys')
-        reg_virt = dump.read_structure_field(device_3d0,
+        reg_virt = dump.read_structure_field(self.devp,
                                              'struct kgsl_device', 'reg_virt')
-        ft_policy = dump.read_structure_field(device_3d0,
+        ft_policy = dump.read_structure_field(self.devp,
                                               'struct adreno_device',
                                               'ft_policy')
-        long_ib_addr = dump.struct_field_addr(device_3d0,
+        long_ib_addr = dump.struct_field_addr(self.devp,
                                               'struct adreno_device',
                                               'long_ib_detect')
         long_ib_detect = dump.read_bool(long_ib_addr)
-        lm_addr = dump.struct_field_addr(device_3d0,
+        lm_addr = dump.struct_field_addr(self.devp,
                                          'struct adreno_device', 'lm_enabled')
         lm_enabled = dump.read_bool(lm_addr)
-        acd_enabled_addr = dump.struct_field_addr(device_3d0,
+        acd_enabled_addr = dump.struct_field_addr(self.devp,
                                                   'struct adreno_device',
                                                   'acd_enabled')
         acd_enabled = dump.read_bool(acd_enabled_addr)
-        hwcg_enabled_addr = dump.struct_field_addr(device_3d0,
+        hwcg_enabled_addr = dump.struct_field_addr(self.devp,
                                                    'struct adreno_device',
                                                    'hwcg_enabled')
         hwcg_enabled = dump.read_bool(hwcg_enabled_addr)
-        throttling_addr = dump.struct_field_addr(device_3d0,
+        throttling_addr = dump.struct_field_addr(self.devp,
                                                  'struct adreno_device',
                                                  'throttling_enabled')
         throttling_enabled = dump.read_bool(throttling_addr)
-        sptp_pc_addr = dump.struct_field_addr(device_3d0,
+        sptp_pc_addr = dump.struct_field_addr(self.devp,
                                               'struct adreno_device',
                                               'sptp_pc_enabled')
         sptp_pc_enabled = dump.read_bool(sptp_pc_addr)
-        bcl_enabled_addr = dump.struct_field_addr(device_3d0,
+        bcl_enabled_addr = dump.struct_field_addr(self.devp,
                                                   'struct adreno_device',
                                                   'bcl_enabled')
         bcl_enabled = dump.read_bool(bcl_enabled_addr)
-        speed_bin = dump.read_structure_field(device_3d0, 'struct kgsl_device',
+        speed_bin = dump.read_structure_field(self.devp, 'struct kgsl_device',
                                               'speed_bin')
-        cur_rb = dump.read_structure_field(device_3d0,
+        cur_rb = dump.read_structure_field(self.devp,
                                            'struct adreno_device', 'cur_rb')
-        next_rb = dump.read_structure_field(device_3d0,
+        next_rb = dump.read_structure_field(self.devp,
                                             'struct adreno_device', 'next_rb')
-        prev_rb = dump.read_structure_field(device_3d0,
+        prev_rb = dump.read_structure_field(self.devp,
                                             'struct adreno_device', 'prev_rb')
         cur_rb_id = dump.read_structure_field(cur_rb,
                                               'struct adreno_ringbuffer', 'id')
@@ -434,8 +434,7 @@ class GpuParser(RamParser):
         self.writeln('fault_counter: ' + str(fault_counter))
 
     def parse_dispatcher_data_54(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        dispatcher_addr = dump.struct_field_addr(device_3d0,
+        dispatcher_addr = dump.struct_field_addr(self.devp,
                                                  'struct adreno_device',
                                                  'dispatcher')
         inflight = dump.read_structure_field(dispatcher_addr,
@@ -467,8 +466,7 @@ class GpuParser(RamParser):
         self.writeln('fault_counter: ' + str(fault_counter))
 
     def parse_rb_inflight_data(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        rb_base_addr = dump.struct_field_addr(device_3d0,
+        rb_base_addr = dump.struct_field_addr(self.devp,
                                               'struct adreno_device',
                                               'ringbuffers')
         ringbuffers = []
@@ -636,8 +634,7 @@ class GpuParser(RamParser):
                                            str(queue[8])))
 
     def parse_pwrctrl_data(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        pwrctrl_address = dump.struct_field_addr(device_3d0,
+        pwrctrl_address = dump.struct_field_addr(self.devp,
                                                  'struct kgsl_device',
                                                  'pwrctrl')
         active_pwrlevel = dump.read_structure_field(pwrctrl_address,
@@ -721,10 +718,9 @@ class GpuParser(RamParser):
 
     def parse_mutex_data(self, dump):
         self.writeln("device_mutex:")
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        device_mutex = dump.read_structure_field(device_3d0,
+        device_mutex = dump.read_structure_field(self.devp,
                                                  'struct kgsl_device', 'mutex')
-        dispatcher_mutex = dump.read_structure_field(device_3d0,
+        dispatcher_mutex = dump.read_structure_field(self.devp,
                                                      'struct adreno_device',
                                                      'dispatcher')
         mutex_val = dump.read_word(device_mutex)
@@ -787,8 +783,7 @@ class GpuParser(RamParser):
         self.writeln(format_str.format(str(3), str(rptr_3), strhex(ctxt_3)))
 
     def parse_scratch_memory_54(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        scratch_obj = dump.read_structure_field(device_3d0,
+        scratch_obj = dump.read_structure_field(self.devp,
                                                 'struct kgsl_device',
                                                 'scratch')
         hostptr = dump.read_structure_field(scratch_obj, 'struct kgsl_memdesc',
@@ -866,8 +861,7 @@ class GpuParser(RamParser):
                 self.writeln(print_str)
 
     def parse_memstore_memory_54(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        memstore_obj = dump.read_structure_field(device_3d0,
+        memstore_obj = dump.read_structure_field(self.devp,
                                                  'struct kgsl_device',
                                                  'memstore')
         hostptr = dump.read_structure_field(memstore_obj,
@@ -914,8 +908,7 @@ class GpuParser(RamParser):
                 self.writeln(print_str)
 
     def parse_fence_data(self, dump):
-        device_3d0 = dump.read_pointer('kgsl_driver.devp')
-        context_idr = dump.struct_field_addr(device_3d0,
+        context_idr = dump.struct_field_addr(self.devp,
                                              'struct kgsl_device',
                                              'context_idr')
         self.rtw.walk_radix_tree(context_idr, self.__print_fence_info)
@@ -1025,8 +1018,7 @@ class GpuParser(RamParser):
             strhex(context_idr_val), str(attached_val)))
 
     def parse_gmu_data_54(self, dump):
-        devp_addr = dump.read('kgsl_driver.devp')
-        gmu_core = dump.struct_field_addr(devp_addr,
+        gmu_core = dump.struct_field_addr(self.devp,
                                           'struct kgsl_device', 'gmu_core')
         gmu_on = dump.read_structure_field(gmu_core,
                                            'struct gmu_core_device', 'flags')
@@ -1034,7 +1026,7 @@ class GpuParser(RamParser):
             self.writeln('GMU not enabled.')
             return
 
-        a6xx_gmu_dev = dump.sibling_field_addr(devp_addr, 'struct a6xx_device',
+        a6xx_gmu_dev = dump.sibling_field_addr(self.devp, 'struct a6xx_device',
                                                'adreno_dev', 'gmu')
         flags = dump.read_structure_field(a6xx_gmu_dev,
                                           'struct a6xx_gmu_device', 'flags')
@@ -1100,8 +1092,7 @@ class GpuParser(RamParser):
             file.close()
 
     def dump_gpu_snapshot(self, dump):
-        devp_addr = dump.read('kgsl_driver.devp')
-        snapshot_faultcount = dump.read_structure_field(devp_addr,
+        snapshot_faultcount = dump.read_structure_field(self.devp,
                                                         'struct kgsl_device',
                                                         'snapshot_faultcount')
         self.writeln(str(snapshot_faultcount) + ' snapshot fault(s) detected.')
@@ -1113,9 +1104,9 @@ class GpuParser(RamParser):
         snapshot_offset = dump.field_offset('struct kgsl_device', 'snapshot')
         snapshot_memory_offset = dump.field_offset(
             'struct kgsl_device', 'snapshot_memory')
-        snapshot_memory_size = dump.read_u32(devp_addr +
+        snapshot_memory_size = dump.read_u32(self.devp +
                                              snapshot_memory_offset + 8)
-        snapshot_base_addr = dump.read_pointer(devp_addr + snapshot_offset)
+        snapshot_base_addr = dump.read_pointer(self.devp + snapshot_offset)
         if snapshot_base_addr == 0:
             self.writeln('Snapshot not found.')
             return

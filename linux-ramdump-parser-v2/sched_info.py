@@ -27,6 +27,29 @@ def mask_bitset_pos(cpumask):
     else:
         return obj
 
+def cpu_isolation_mask(ramdump):
+    cpu_isolated_bits = 0
+    if (ramdump.kernel_version >= (5, 10, 0)):
+        #Isolation replaced with pause feature.
+        cpuhp_state_addr = ramdump.address_of('cpuhp_state')
+        pause_state = ramdump.gdbmi.get_value_of('CPUHP_AP_ACTIVE') - 1
+
+        for i in ramdump.iter_cpus():
+            cpu_state_off = cpuhp_state_addr + ramdump.per_cpu_offset(i)
+            state = ramdump.read_structure_field(cpu_state_off, 'struct cpuhp_cpu_state', 'state')
+            target = ramdump.read_structure_field(cpu_state_off, 'struct cpuhp_cpu_state', 'target')
+
+            if state == pause_state and target == pause_state:
+                cpu_isolated_bits |= 1 << i
+
+    elif (ramdump.kernel_version >= (4, 9, 0)):
+        cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
+    elif (ramdump.kernel_version >= (4, 4, 0)):
+        cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
+
+    return cpu_isolated_bits
+
+
 def verify_active_cpus(ramdump):
     cpu_topology_addr = ramdump.address_of('cpu_topology')
     cpu_topology_size = ramdump.sizeof('struct cpu_topology')
@@ -54,16 +77,10 @@ def verify_active_cpus(ramdump):
         online = ramdump.read_int(rq_addr + online_offset)
         cpu_online_bits |= (online << i)
 
-    print("cpu_online_bits.. {0}".format(cpu_online_bits))
-    if (ramdump.kernel_version >= (5, 10, 0)):
-        cpu_isolated_bits = ramdump.read_word('__cpu_active_mask')
-    elif (ramdump.kernel_version >= (4, 9, 0)):
-        cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
-    elif (ramdump.kernel_version >= (4, 4, 0)):
-        cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
-
     if (cluster_id_off is None):
         print_out_str("\n Invalid cluster topology detected\n")
+
+    cpu_isolated_bits = cpu_isolation_mask(ramdump)
 
     # INFO: from 4.19 onwards, core_sibling mask contains only online cpus,
     #       find out cluster cpus dynamically.
@@ -75,11 +92,23 @@ def verify_active_cpus(ramdump):
             cluster_cpus.extend([0])
         cluster_cpus[c_id] |= (1 << j)
 
+    cluster_data_off = ramdump.address_of('cluster_state')
+
     for i in range(0, len(cluster_cpus)):
         cluster_online_cpus = cpu_online_bits & cluster_cpus[i]
         cluster_nr_oncpus = bin(cluster_online_cpus).count('1')
         cluster_isolated_cpus = cpu_isolated_bits & cluster_cpus[i]
         cluster_nr_isocpus = bin(cluster_isolated_cpus).count('1')
+        crctl_nr_isol = 0
+
+        if cluster_data_off:
+        # Get core_ctl isolated cpus:
+            clust_addr = ramdump.array_index(cluster_data_off, 'struct cluster_data', i)
+
+            if (ramdump.kernel_version >= (5, 10, 0)):
+                crctl_nr_isol = ramdump.read_structure_field(clust_addr, 'struct cluster_data', 'nr_paused_cpus')
+            if (ramdump.kernel_version >= (4, 4, 0)):
+                crctl_nr_isol = ramdump.read_structure_field(clust_addr, 'struct cluster_data', 'nr_isolated_cpus')
 
         if (bin(cluster_cpus[i]).count('1') > 2):
             min_req_cpus = 2
@@ -91,11 +120,11 @@ def verify_active_cpus(ramdump):
                 print_out_str("\tMinimum active cpus are not available in the cluster {0}\n".format(i))
 
                 print_out_str("*" * 10 + " WARNING " + "*" * 10 + "\n")
-        print_out_str("\tCluster cpus: {0}  Online cpus: {1} Isolated cpus: {2} nr_cpu: {3}\n".format(
+        print_out_str("\tCluster nr_cpu: {0} cpus: {1}  Online cpus: {2} Isolated cpus: {3} (core_ctl nr_isol: {4})\n".format(
+                        bin(cluster_cpus[i]).count('1'),
                         mask_bitset_pos(cluster_cpus[i]),
                         mask_bitset_pos(cluster_online_cpus),
-                        mask_bitset_pos(cluster_isolated_cpus),
-                        bin(cluster_cpus[i]).count('1')))
+                        mask_bitset_pos(cluster_isolated_cpus), crctl_nr_isol))
 
 def dump_cpufreq_data(ramdump):
     cpufreq_data_addr = ramdump.address_of('cpufreq_cpu_data')

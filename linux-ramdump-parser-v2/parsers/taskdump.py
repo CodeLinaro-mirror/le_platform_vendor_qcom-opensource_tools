@@ -177,7 +177,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'android_vendor_data1')
             else:
                 walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'wts')
-            offset_last_enqueued_ts = offset_last_enqueued_ts + walt_task_struct_offset
+            offset_last_sleep_ts = offset_last_sleep_ts + walt_task_struct_offset
         if offset_last_sleep_ts:
             next_thread_last_sleep_ts = next_thread_start + offset_last_sleep_ts
             task_last_sleep_ts = ramdump.read_u64(next_thread_last_sleep_ts)

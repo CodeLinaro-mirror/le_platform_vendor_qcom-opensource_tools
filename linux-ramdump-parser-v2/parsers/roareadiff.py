@@ -88,50 +88,50 @@ class ROData(RamParser):
                             while i < max_read_size:
                                 try:
                                     ram_value = struct.unpack_from('I', ram_values, i)[0]
-                                vm_value = struct.unpack_from('I', vm_values, i)[0]
+                                    vm_value = struct.unpack_from('I', vm_values, i)[0]
 
-                                if detect == 64:
-                                    ddr_str += ddr_ascii + '\n\n'
-                                    vmlinux_str += vm_ascii + '\n\n'
-                                    roarea_out.write(ddr_str)
-                                    roarea_out.write(vmlinux_str)
-                                    detect = 0xFFFFFFFF
-                                if detect == 0xFFFFFFFF and ram_value != vm_value:
-                                    ddr_str = 'detect RO area differences between vmlinux and DDR at 0x{0:0>8x}\n'.format(
-                                        count + i)
-                                    ddr_str += 'from DDR:'
-                                    vmlinux_str = 'from vmlinux:'
-                                    ddr_ascii = '  '
-                                    vm_ascii = '  '
-                                    detect = 0
-                                    if max_read_size < i + OUTPUT_SIZE and max_read_size == LUMP_SIZE:
-                                        max_read_size = i + OUTPUT_SIZE
-                                        ram_values = self.ramdump.read_physical(self.ramdump.virt_to_phys(count), max_read_size)
-                                        fd.seek(prgheader.offset + count - prgheader.paddr)
-                                        vm_values = fd.read(max_read_size)
-                                if 0 <= detect and detect < 64:
-                                    if detect % 8 == 0:
-                                        ddr_str += ddr_ascii + '\n{0:0>8x} '.format(count + i)
-                                        vmlinux_str += vm_ascii + '\n{0:0>8x} '.format(count + i)
+                                    if detect == 64:
+                                        ddr_str += ddr_ascii + '\n\n'
+                                        vmlinux_str += vm_ascii + '\n\n'
+                                        roarea_out.write(ddr_str)
+                                        roarea_out.write(vmlinux_str)
+                                        detect = 0xFFFFFFFF
+                                    if detect == 0xFFFFFFFF and ram_value != vm_value:
+                                        ddr_str = 'detect RO area differences between vmlinux and DDR at 0x{0:0>8x}\n'.format(
+                                            count + i)
+                                        ddr_str += 'from DDR:'
+                                        vmlinux_str = 'from vmlinux:'
                                         ddr_ascii = '  '
                                         vm_ascii = '  '
-                                    ddr_str += ' '
-                                    vmlinux_str += ' '
-                                    if ram_value != vm_value:
-                                        ddr_str += '*'
-                                        vmlinux_str += '*'
-                                    else:
+                                        detect = 0
+                                        if max_read_size < i + OUTPUT_SIZE and max_read_size == LUMP_SIZE:
+                                            max_read_size = i + OUTPUT_SIZE
+                                            ram_values = self.ramdump.read_physical(self.ramdump.virt_to_phys(count), max_read_size)
+                                            fd.seek(prgheader.offset + count - prgheader.paddr)
+                                            vm_values = fd.read(max_read_size)
+                                    if 0 <= detect and detect < 64:
+                                        if detect % 8 == 0:
+                                            ddr_str += ddr_ascii + '\n{0:0>8x} '.format(count + i)
+                                            vmlinux_str += vm_ascii + '\n{0:0>8x} '.format(count + i)
+                                            ddr_ascii = '  '
+                                            vm_ascii = '  '
                                         ddr_str += ' '
                                         vmlinux_str += ' '
-                                    ddr_str += '{0:0>8x}'.format(ram_value)
-                                    vmlinux_str += '{0:0>8x}'.format(vm_value)
-                                    for j in range(4):
-                                        c = '{0:c}'.format(struct.unpack_from('B', ram_values, i + j)[0]).rstrip()
-                                        ddr_ascii += c if c in string.printable else '.'
-                                        c = '{0:c}'.format(struct.unpack_from('B', vm_values, i + j)[0]).rstrip()
-                                        vm_ascii += c if c in string.printable else '.'
-                                    detect += 1
-                                i = i + 4
+                                        if ram_value != vm_value:
+                                            ddr_str += '*'
+                                            vmlinux_str += '*'
+                                        else:
+                                            ddr_str += ' '
+                                            vmlinux_str += ' '
+                                        ddr_str += '{0:0>8x}'.format(ram_value)
+                                        vmlinux_str += '{0:0>8x}'.format(vm_value)
+                                        for j in range(4):
+                                            c = '{0:c}'.format(struct.unpack_from('B', ram_values, i + j)[0]).rstrip()
+                                            ddr_ascii += c if c in string.printable else '.'
+                                            c = '{0:c}'.format(struct.unpack_from('B', vm_values, i + j)[0]).rstrip()
+                                            vm_ascii += c if c in string.printable else '.'
+                                        detect += 1
+                                    i = i + 4
                                 except Exception as err:
                                     roarea_out.write("Failed roaddress = {0}".format(count))
                             if detect != 0xFFFFFFFF:

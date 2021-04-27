@@ -181,6 +181,12 @@ class GdbMI(object):
         """Return GDB version"""
         return self._run_for_first('show version')
 
+    def setup_aarch(self,type):
+        self.aarch_set = True
+        cmd = 'set architecture ' + type
+        result = self._run_for_one(cmd)
+        return
+
     def frame_field_offset(self, frame_name, the_type, field):
         """Returns the offset of a field in a struct or type of selected frame
         if there are two vairable with same na,e in source code.
@@ -190,6 +196,17 @@ class GdbMI(object):
         cmd = 'print /x (int)&(({0} *)0)->{1}'.format(the_type, field)
         result = self._run_for_one(cmd)
         return gdb_hex_to_dec(result)
+
+    def type_of(self, symbol):
+        """ Returns the type of symbol.
+
+        Example:
+        >>> gdbmi.type_of("kgsl_driver")
+        struct kgsl_driver
+        """
+        cmd = 'print &{0}'.format(symbol)
+        result = self._run_for_one(cmd)
+        return result.split("*)")[0].split("= (")[1]
 
     def field_offset(self, the_type, field):
         """Returns the offset of a field in a struct or type.
