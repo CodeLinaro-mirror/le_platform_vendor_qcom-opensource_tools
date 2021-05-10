@@ -1,0 +1,379 @@
+{
+    "CACHEDUMP_CACHE_ID_L1_D": {
+        "structure": {
+            "associativity": 4,
+            "numSets": 256
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_D_DATA": {
+        "structure": {
+            "blockSize": 64,
+            "parent": "CACHEDUMP_CACHE_ID_L1_D"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_D_TAG": {
+        "fields": [
+            {
+                "bitfield": "1:0",
+                "name": "MESI"
+            },
+            {
+                "bitfield": "2",
+                "name": "Transient/WBNA"
+            },
+            {
+                "bitfield": "32:5",
+                "hex": "1",
+                "name": "PA[39:12]"
+            },
+            {
+                "bitfield": "33",
+                "name": "NS"
+            },
+            {
+                "bitfield": "40:34",
+                "hex": "1",
+                "name": "ECC"
+            }
+        ],
+        "structure": {
+            "blockSize": 8,
+            "parent": "CACHEDUMP_CACHE_ID_L1_D"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_D_TLB": {
+        "structure": {
+            "associativity": "1",
+            "numSets": "48"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_D_TLB_DATA": {
+        "fields": [
+            {
+                "bitfield": "64+34:64+0,63:62",
+                "hex": 1,
+                "name": "VA[48:12]"
+            },
+            {
+                "bitfield": "35",
+                "name": "NS"
+            },
+            {
+                "bitfield": "34:33",
+                "name": "Txln regime"
+            },
+            {
+                "bitfield": "58",
+                "name": "OSH"
+            },
+            {
+                "bitfield": "57",
+                "name": "ISH"
+            },
+            {
+                "bitfield": "52:50",
+                "name": "Mem Attr"
+            },
+            {
+                "bitfield": "38:36",
+                "name": "Page Size"
+            },
+            {
+                "bitfield": "32:17",
+                "hex": 1,
+                "name": "ASID"
+            },
+            {
+                "bitfield": "16:1",
+                "hex": 1,
+                "name": "VMID"
+            },
+            {
+                "bitfield": "62:35",
+                "hex": 1,
+                "name": "PA[39:12]"
+            },
+            {
+                "bitfield": "64*1+63,64*2+0",
+                "name": "PBHA"
+            },
+            {
+                "bitfield": "0",
+                "name": "Valid"
+            }
+        ],
+        "structure": {
+            "blockSize": "24",
+            "parent": "CACHEDUMP_CACHE_ID_L1_D_TLB"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_I": {
+        "structure": {
+            "associativity": 4,
+            "numSets": 256
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_I_DATA": {
+        "structure": {
+            "blockSize": 128,
+            "parent": "CACHEDUMP_CACHE_ID_L1_I"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_I_TAG": {
+        "fields": [
+            {
+                "bitfield": "31",
+                "name": "NS"
+            },
+            {
+                "bitfield": "30:3",
+                "hex": 1,
+                "name": "PA",
+                "post_process": [
+                    {
+                        "<<": 6
+                    },
+                    {
+                        "|": {
+                            "Set": "5:0"
+                        }
+                    },
+                    {
+                        "<<": 6
+                    }
+                ]
+            },
+            {
+                "bitfield": "2:1",
+                "name": "Inst State"
+            },
+            {
+                "bitfield": "0",
+                "name": "Parity"
+            }
+        ],
+        "structure": {
+            "blockSize": 4,
+            "parent": "CACHEDUMP_CACHE_ID_L1_I"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_I_TLB": {
+        "structure": {
+            "associativity": "1",
+            "numSets": "48"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L1_I_TLB_DATA": {
+        "fields": [
+            {
+                "bitfield": "64+60",
+                "name": "NS"
+            },
+            {
+                "bitfield": "64+59:64+32",
+                "hex": 1,
+                "name": "PA[39:12]"
+            },
+            {
+                "bitfield": "64+31:64+0,63:59",
+                "hex": 1,
+                "name": "VA[48:12]"
+            },
+            {
+                "bitfield": "58:57",
+                "name": "PBHA"
+            },
+            {
+                "bitfield": "56",
+                "name": "TLB Attr 1"
+            },
+            {
+                "bitfield": "49:46",
+                "hex": 1,
+                "name": "TLB Attr 2"
+            },
+            {
+                "bitfield": "43:39",
+                "hex": 1,
+                "name": "TLB Attr 3"
+            },
+            {
+                "bitfield": "4:1",
+                "hex": 1,
+                "name": "TLB Attr 4"
+            },
+            {
+                "bitfield": "55:53",
+                "name": "Mem Attr"
+            },
+            {
+                "bitfield": "52:50",
+                "name": "Page Size"
+            },
+            {
+                "bitfield": "45",
+                "name": "OSH"
+            },
+            {
+                "bitfield": "44",
+                "name": "ISH"
+            },
+            {
+                "bitfield": "38:23",
+                "hex": 1,
+                "name": "ASID"
+            },
+            {
+                "bitfield": "22:7",
+                "hex": 1,
+                "name": "VMID"
+            },
+            {
+                "bitfield": "6:5",
+                "name": "Txln regime"
+            },
+            {
+                "bitfield": "0",
+                "name": "Valid"
+            }
+        ],
+        "structure": {
+            "blockSize": "16",
+            "parent": "CACHEDUMP_CACHE_ID_L1_I_TLB"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L2": {
+        "structure": {
+            "associativity": "8",
+            "numSets": "512"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L2_DATA": {
+        "structure": {
+            "blockSize": 64,
+            "parent": "CACHEDUMP_CACHE_ID_L2"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L2_TAG": {
+        "fields": [
+            {
+                "bitfield": "45:39",
+                "name": "ECC"
+            },
+            {
+                "bitfield": "38:37",
+                "name": "PBHA"
+            },
+            {
+                "bitfield": "36:12",
+                "hex": 1,
+                "name": "PA[39:15]"
+            },
+            {
+                "bitfield": "11",
+                "name": "NS"
+            },
+            {
+                "bitfield": "10:9",
+                "name": "Virtual Index[13:12]"
+            },
+            {
+                "bitfield": "5",
+                "name": "Shareable"
+            },
+            {
+                "bitfield": "4",
+                "name": "Outer allocation hint"
+            },
+            {
+                "bitfield": "3",
+                "name": "L1 data cache valid"
+            },
+            {
+                "bitfield": "2:0",
+                "name": "MESI"
+            }
+        ],
+        "structure": {
+            "blockSize": "8",
+            "parent": "CACHEDUMP_CACHE_ID_L2"
+        }
+    },
+    "CACHEDUMP_CACHE_ID_L2_TLB_DATA": {
+        "fields": [
+            {
+                "bitfield": "58",
+                "name": "Non-global"
+            },
+            {
+                "bitfield": "57",
+                "name": "Outer-shared"
+            },
+            {
+                "bitfield": "56",
+                "name": "Inner-shared"
+            },
+            {
+                "bitfield": "54:52",
+                "name": "Mem Attr"
+            },
+            {
+                "bitfield": "47:20",
+                "hex": 1,
+                "name": "PA[39:12]"
+            },
+            {
+                "bitfield": "19:17",
+                "name": "Page size"
+            },
+            {
+                "bitfield": "6",
+                "name": "Coalesced"
+            },
+            {
+                "bitfield": "5:2",
+                "hex": 1,
+                "name": "Valid"
+            },
+            {
+                "bitfield": "64*2+7:64*2+0,64+63:64+56",
+                "hex": 1,
+                "name": "VMID"
+            },
+            {
+                "bitfield": "64+55:64+40",
+                "name": "ASID"
+            },
+            {
+                "bitfield": "64+39:64+38",
+                "name": "PBHA"
+            },
+            {
+                "bitfield": "64+37",
+                "name": "Walk cache entry"
+            },
+            {
+                "bitfield": "64+36",
+                "name": "Prefetched txln"
+            },
+            {
+                "bitfield": "64+35:64+7",
+                "hex": 1,
+                "name": "VA[48:20]"
+            },
+            {
+                "bitfield": "64+6",
+                "name": "NS"
+            },
+            {
+                "bitfield": "9:8",
+                "name": "Txln Regime"
+            }
+        ],
+        "structure": {
+            "associativity": 5,
+            "blockSize": 24,
+            "numSets": 256
+        }
+    }
+}

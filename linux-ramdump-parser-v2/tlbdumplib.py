@@ -274,6 +274,50 @@ class TlbDumpType_v3(object):
 
             self.ramdump.remove_file(datafile_name)
 
+class TlbDumpType_v4(object):
+    def __init__(self):
+        self.infile_name = "scratch.bin"
+
+    def parse(self, start, end, ramdump, outfile):
+        self.ramdump = ramdump
+        self.outfile = outfile
+        """kryo tlb parser expects an input file with dump data for the tlb so
+           temporarily create file with dump data"""
+        infile_fd = ramdump.open_file(self.infile_name)
+        core_dump_size = end - start
+        buf = ramdump.read_physical(start, core_dump_size)
+        infile_fd.write(buf)
+        infile_fd.close()
+        self.parse_dump()
+        ramdump.remove_file(self.infile_name)
+
+    def parse_dump(self):
+        #child class should implement this method
+        raise NotImplementedError
+
+    def kryo_tlb_parse(self, cmd, offset, outfile_name):
+        #expected cmdline arguments for kryo tlb parser.
+        opts_flgs = ["-i", "-o", "-t", "-c", "-s"]
+        infile_path = os.path.join(self.ramdump.outdir, self.infile_name)
+        outfile_path = os.path.join(self.ramdump.outdir, outfile_name)
+        cpu_name = self.cpu_name
+        offset_str = str(offset)
+        opts_params = [infile_path, outfile_path, cmd, cpu_name, offset_str]
+        argv = [None] * (2 * len(opts_flgs))
+        #get the path for the kryo_cache_tlb_parser.py in this directory
+        exec_path = sys.argv[0].strip("ramparse.py")
+        exec_path += "kryo_cache_tlb_json_parser.py"
+
+        for i in xrange(len(opts_flgs)):
+            argv[2 * i] = opts_flgs[i]
+            argv[(2 * i) + 1] = opts_params[i]
+
+        argv_str = " ".join(str(x) for x in argv)
+
+        """We must do this, since the parser's main() function does not take
+           any arguments; they must be passed through the command line"""
+        os.system("python " + exec_path + " " + argv_str)
+
 
 class L1_TLB_KRYO2XX_GOLD(TlbDumpType_v2):
     def __init__(self):
@@ -707,6 +751,9 @@ class L2_TLB_KRYO4XX_GOLD(TlbDumpType_v3):
         self.kryo_tlb_parse("TLBD", 0, datafile_name)
         self.post_process(datafile_name)
 
+
+if os.path.exists(os.path.join(os.path.dirname(__file__), 'extensions', 'cache_tlb_config.py')):
+    import extensions.cache_tlb_config
 
 #msmnile
 lookuptable[("msmnile", 0x24, 0x14)] = L1_ITLB_KRYO4XX_GOLD()
