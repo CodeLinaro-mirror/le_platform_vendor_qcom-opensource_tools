@@ -1095,14 +1095,12 @@ class TZCpuCtx_v2():
                 if reg_name.startswith('cpu_state_') or reg_name.startswith('pstate') :
                     continue
                 if t32_name in cpu_per_regiter_format.keys():
-                    if 'tcr_el1' in t32_name and ramdump.tbi_mask:
-                        tcr_el1 = self.regs[reg_name]
-                        tcr_el1 = tcr_el1 ^ ramdump.tbi_mask
-                        outfile.write(
-                            '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], tcr_el1))
-                    else:
-                        outfile.write(
-                            '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], self.regs[reg_name]))
+                    outfile.write(
+                        '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], self.regs[reg_name]))
+                    if 'sctlr_el1' in t32_name and ramdump.hlos_sctlr_el1 is None:
+                        ramdump.hlos_sctlr_el1 = self.regs[reg_name]
+                    if 'tcr_el1' in t32_name and ramdump.hlos_tcr_el1 is None:
+                        ramdump.hlos_tcr_el1 = self.regs[reg_name]
                 else:
                     outfile.write(
                         'r.s {0} 0x{1:x}\n'.format(t32_name, self.regs[reg_name]))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -455,6 +455,4 @@ if __name__ == '__main__':
 
     if options.t32launcher or options.everything or options.minidump:
         dump.create_t32_launcher()
-
-    dump.gdbmi.close()
 

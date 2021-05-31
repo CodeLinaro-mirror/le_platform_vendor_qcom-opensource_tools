@@ -247,7 +247,6 @@ class DebugImage_v2():
             'Parsing CPU{2} context start {0:x} end {1:x} version {3} client_id-> {4}'.format(start, end, core,version,client_id))
         if version == 32 or version == "32":
             try:
-                ram_dump.gdmi_switch_open()
                 cpu_type_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'cpu_type')
                 if cpu_type_offset is None:
@@ -319,9 +318,8 @@ class DebugImage_v2():
                     return
                 regs.dump_core_pc_gprs(ram_dump)
                 regs.dump_all_regs_gprs(ram_dump)
-                ram_dump.gdmi_switch_close()
             except Exception as err:
-                ram_dump.gdmi_switch_close()
+                pass
         else:
             regs = TZRegDump_v2()
             if regs.init_regs(version, start, end, core, ram_dump) is False:

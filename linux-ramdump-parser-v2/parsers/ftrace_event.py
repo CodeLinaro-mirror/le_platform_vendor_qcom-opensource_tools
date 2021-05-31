@@ -631,7 +631,7 @@ class FtraceParser_Event(object):
                     if "function" == keyinfo:
                         wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
                         tt = keyinfo + "=" + wq_function1
-                    if "func" == keyinfo:
+                    if "func" in keyinfo:
                         wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
                         if wq_function1 and len(wq_function1) > 1 and wq_function1 != 'No':
                             tt = keyinfo + "=" + wq_function1

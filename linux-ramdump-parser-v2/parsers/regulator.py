@@ -1,4 +1,4 @@
-# Copyright (c) 2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -106,8 +106,7 @@ class RegulatorDump(RamParser):
         return self.ramdump.container_of(dev, 'struct regulator_dev', 'dev')
 
     def is_rpmh_regulator_rdev(self, rdev):
-        rpmh_regulator_enable_addr = self.ramdump.address_of('rpmh_regulator_enable')
-        if not rpmh_regulator_enable_addr:
+        if (not self.rpmh_regulator_enable_addr) or (not self.vrm_ops_enable_addr):
             return False
 
         desc = self.ramdump.read_structure_field(rdev, 'struct regulator_dev', 'desc')
@@ -127,8 +126,10 @@ class RegulatorDump(RamParser):
 
         # Check if this regulator is an rpmh_regulator device by seeing if
         # its enable() op is rpm_regulator_enable
-        return ((ops_enable_addr == rpmh_regulator_enable_addr)
-                or (ops_enable_jump_addr == rpmh_regulator_enable_addr))
+        return ((ops_enable_addr == self.rpmh_regulator_enable_addr)
+                or (ops_enable_jump_addr == self.rpmh_regulator_enable_addr)
+                or (ops_enable_addr == self.vrm_ops_enable_addr)
+                or (ops_enable_jump_addr == self.vrm_ops_enable_addr))
 
     def dump_rpmh_regulator_req_data(self, aggr_vreg, regulator_type, set, req, reg_name):
         rpmh_resource_name = self.ramdump.read_structure_cstring(aggr_vreg,
@@ -399,6 +400,21 @@ class RegulatorDump(RamParser):
             mutex = self.ramdump.address_of(mutex_symbol)
             self.store_mutex_waiters(mutex, mutex_label)
 
+    def init_rpmh_regulator(self):
+        # rpmh_regulator_enable_addr and vrm_ops_enable_addr should have the
+        # same value as they both correspond to the same function
+        # (rpmh_regulator_enable).  However, self.ramdump.address_of() does not
+        # return the correct address for function symbols loaded from a DLKM.
+        # This occurs because the gdb program itself outputs incorrect addresses
+        # in this case.  Thus work around the issue by getting the address two
+        # ways and using both in later checks.
+        self.rpmh_regulator_enable_addr = self.ramdump.address_of('rpmh_regulator_enable')
+        vrm_ops = self.ramdump.address_of('rpmh_regulator_vrm_ops')
+        if vrm_ops:
+            self.vrm_ops_enable_addr = self.ramdump.read_structure_field(vrm_ops, 'struct regulator_ops', 'enable')
+        else:
+            self.vrm_ops_enable_addr = 0
+
     def dump_regulator_cycle(self, back_edge):
         print_out_str('WARNING: REGULATOR MUTEX LOCK DEADLOCK DETECTED!')
         self.output_file.write('REGULATOR MUTEX LOCK DEADLOCK DETECTED!\n')
@@ -437,6 +453,7 @@ class RegulatorDump(RamParser):
     def parse(self):
         with self.ramdump.open_file('regulator.txt') as self.output_file:
             self.init_regulator_top_level()
+            self.init_rpmh_regulator()
             self.init_regulators()
             try:
                 self.regulator_deadlock_check()

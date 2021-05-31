@@ -2385,7 +2385,6 @@ class MDPinfo(RamParser):
                                   'last_dump': Struct.get_u32})
 
                 SDE_EVTLOG_ENTRY = 8192
-                SDE_EVTLOG_MAX_DATA = self.ramdump.sizeof('(*(sde_dbg_base.evtlog)).logs[0].data')/4
                 self.outfile.write('%-60.50s%-20.5s%-8.5s%-8.5s%s\n' % ("FUNC", "TIME", "PID", "CPU", "DATA"))
                 sde_evtlog_start = 0
                 sde_evtlog_repeat = 0

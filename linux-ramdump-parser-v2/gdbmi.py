@@ -70,11 +70,20 @@ class GdbMI(object):
         """Open the connection to the ``gdbmi`` backend. Not needed if using
         ``gdbmi`` as a context manager (recommended).
         """
+        if sys.platform.startswith("win"):
+            import ctypes
+            SEM_NOGPFAULTERRORBOX = 0x0002 # From MSDN
+            ctypes.windll.kernel32.SetErrorMode(SEM_NOGPFAULTERRORBOX);
+            subprocess_flags = 0x8000000 #win32con.CREATE_NO_WINDOW?
+        else:
+            subprocess_flags = 0
+
         self._gdbmi = subprocess.Popen(
             [self.gdb_path, '--interpreter=mi2', self.elf],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            universal_newlines=True
+            universal_newlines=True,
+            creationflags=subprocess_flags
         )
         self._flush_gdbmi()
 
@@ -131,11 +140,14 @@ class GdbMI(object):
             if cmd in self._cache:
                 return GdbMIResult(self._cache[cmd], [])
 
-        self._gdbmi.stdin.write(cmd.rstrip('\n') + '\n')
-        self._gdbmi.stdin.flush()
-
         output = []
         oob_output = []
+        try:
+            self._gdbmi.stdin.write(cmd.rstrip('\n') + '\n')
+            self._gdbmi.stdin.flush()
+        except Exception as err:
+            return GdbMIResult(output, oob_output)
+
         while True:
             line = self._gdbmi.stdout.readline()
             """
@@ -153,6 +165,8 @@ class GdbMI(object):
                 line = line[1:]
                 # strip the leading and trailing "
                 line = line[1:-1]
+                if line.startswith("\\n"):
+                    continue
                 # strip any trailing (possibly escaped) newlines
                 if line.endswith('\\n'):
                     line = line[:-2]

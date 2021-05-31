@@ -139,7 +139,9 @@ class struct_print_class(object):
                 node.val = self.struct_inst.__getattr__(node.name)
             except:
                 print('key lookup exception [{0:s}] : [{1:s}]\n'.format(node.name, node.data_type))
-                assert(0)
+                node.name = node.name + " : not found"
+                node.val = 0x0
+                pass
 
     def get_val(self, name):
         val = self.struct_inst.__getattr__(name)

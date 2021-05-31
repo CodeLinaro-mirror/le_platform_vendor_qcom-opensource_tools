@@ -1,4 +1,4 @@
-# Copyright (c) 2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
 #
 #
 # This program is free software; you can redistribute it and/or modify
@@ -222,8 +222,9 @@ class UfsHba():
                             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'pm_op_in_progress'))))
         print_out_ufs("\tahit = 0x%x" % (self.ramdump.read_int(
             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'ahit'))))
-        print_out_ufs("\tlrb_in_use = 0x%x" % (self.ramdump.read_int(
-            self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'lrb_in_use'))))
+        if self.ramdump.get_kernel_version() < (5, 10, 0):
+            print_out_ufs("\tlrb_in_use = 0x%x" % (self.ramdump.read_int(
+                self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'lrb_in_use'))))
         print_out_ufs("\toutstanding_tasks = 0x%x" % (self.ramdump.read_int(
             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'outstanding_tasks'))))
         print_out_ufs("\toutstanding_reqs = 0x%x" % (self.ramdump.read_int(
@@ -249,10 +250,11 @@ class UfsHba():
             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'quirks'))))
         print_out_ufs("\tdev_quirks = 0x%x" % (self.ramdump.read_int(
             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'dev_quirks'))))
-        print_out_ufs("\ttm_condition = 0x%x" % (self.ramdump.read_ulong(
-            self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'tm_condition'))))
-        print_out_ufs("\ttm_slots_in_use = 0x%x" % (self.ramdump.read_ulong(
-            self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'tm_slots_in_use'))))
+        if self.ramdump.get_kernel_version() < (5, 10, 0):
+            print_out_ufs("\ttm_condition = 0x%x" % (self.ramdump.read_ulong(
+                self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'tm_condition'))))
+            print_out_ufs("\ttm_slots_in_use = 0x%x" % (self.ramdump.read_ulong(
+                self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'tm_slots_in_use'))))
         self.dump_uic_cmd()
         print_out_ufs("\tufshcd_state = %d" % (self.ramdump.read_int(
             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'ufshcd_state'))))

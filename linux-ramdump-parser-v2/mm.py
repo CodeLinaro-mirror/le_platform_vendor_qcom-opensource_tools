@@ -108,52 +108,14 @@ def page_to_section(page_flags):
     return (page_flags >> 28) & 0xF
 
 
-def nr_to_section(ramdump, sec_num):
-    memsection_struct_size = ramdump.sizeof('struct mem_section')
-    sections_per_root = 4096 // memsection_struct_size
-    sect_nr_to_root = sec_num // sections_per_root
-    masked = sec_num & (sections_per_root - 1)
-    mem_section_addr = ramdump.address_of('mem_section')
-    mem_section = ramdump.read_word(ramdump.read_word(mem_section_addr))
-    if mem_section is None:
-        return None
-    return mem_section + memsection_struct_size * (sect_nr_to_root * sections_per_root + masked)
-
-def get_mem_section(ramdump):
-    mem_section_addr = ramdump.address_of('mem_section')
-    mem_section = ramdump.read_word(ramdump.read_word(mem_section_addr))
-    return mem_section
-
 def section_mem_map_addr(ramdump, section):
     map_offset = ramdump.field_offset('struct mem_section', 'section_mem_map')
     result = ramdump.read_word(section + map_offset)
     return result & ~((1 << 2) - 1)
 
 
-def pfn_to_section_nr(ramdump, pfn):
-    SECTION_SIZE_BITS = get_section_size_bits(ramdump)
-    return pfn >> (SECTION_SIZE_BITS - 12)
-
-def get_section_size_bits(ramdump):
-    SECTION_SIZE_BITS = 0
-    if ramdump.arm64:
-        if ramdump.kernel_version >= (5, 10, 19):
-            if ramdump.is_config_defined('CONFIG_ARM64_4K_PAGES') \
-                or ramdump.is_config_defined('CONFIG_ARM64_16K_PAGES'):
-                SECTION_SIZE_BITS = 27
-            else:
-                SECTION_SIZE_BITS = 29
-        else:
-            if not ramdump.is_config_defined('CONFIG_MEMORY_HOTPLUG'):
-                SECTION_SIZE_BITS = 30
-            else:
-                SECTION_SIZE_BITS = int(ramdump.get_config_val("CONFIG_HOTPLUG_SIZE_BITS"))
-    else:
-        SECTION_SIZE_BITS = 28
-    return SECTION_SIZE_BITS
-
 def pfn_to_section(ramdump, pfn):
-    return nr_to_section(ramdump, pfn_to_section_nr(ramdump, pfn))
+    return ramdump.mm.sparsemem.pfn_to_section(pfn)
 
 
 def pfn_to_page_sparse(ramdump, pfn):
@@ -410,3 +372,90 @@ def for_each_pfn(ramdump):
             pfn += 1
 
         region += memblock_region_size
+
+
+"""
+All fields should be declared and documented in constructor.
+"""
+class MemoryManagementSubsystem:
+    def __init__(self, ramdump):
+        self.rd = ramdump
+        self.SECTION_SIZE_BITS = 0
+
+class Sparsemem:
+    def __init__(self, ramdump):
+        self.rd = ramdump
+        """ Cache section_nr to mem_section_ptr mapping for fast lookup """
+        self.memsection_cache = dict()
+
+    def pfn_to_section(self, pfn):
+        ramdump = self.rd
+        section_nr = pfn >> (self.rd.mm.SECTION_SIZE_BITS - 12)
+        if section_nr in self.memsection_cache:
+            return self.memsection_cache[section_nr]
+
+        memsection_struct_size = ramdump.sizeof('struct mem_section')
+        pointer_size = ramdump.sizeof('struct mem_section *')
+        sections_per_root = 4096 // memsection_struct_size
+        root_nr = section_nr // sections_per_root
+        section_nr = section_nr % sections_per_root
+        mem_section_base = ramdump.read_word('mem_section')
+
+        if ramdump.is_config_defined('CONFIG_SPARSEMEM_EXTREME'):
+            #struct mem_section *mem_section[NR_SECTION_ROOTS];
+            offset = pointer_size * root_nr
+            ptr = ramdump.read_word(mem_section_base + offset)
+            offset = memsection_struct_size * section_nr
+            mem_section_ptr = ptr + offset
+        else:
+            #struct mem_section mem_section[NR_SECTION_ROOTS][SECTIONS_PER_ROOT];
+            offset = memsection_struct_size * (section_nr + root_nr * sections_per_root)
+            mem_section_ptr = mem_section_base + offset
+
+        self.memsection_cache[section_nr + root_nr * sections_per_root] = mem_section_ptr
+        return mem_section_ptr
+
+def sparse_init(mm):
+    mm.sparsemem = None
+    if not mm.rd.is_config_defined('CONFIG_SPARSEMEM'):
+        return True
+
+    mm.sparsemem = Sparsemem(mm.rd)
+    return True
+
+def section_size_init(mm):
+    SECTION_SIZE_BITS = 0
+    ramdump = mm.rd
+    if ramdump.arm64:
+        if ramdump.kernel_version >= (5, 10, 19):
+            """ Modified by upstream """
+            if ramdump.is_config_defined('CONFIG_ARM64_4K_PAGES') \
+                or ramdump.is_config_defined('CONFIG_ARM64_16K_PAGES'):
+                SECTION_SIZE_BITS = 27
+            else:
+                SECTION_SIZE_BITS = 29
+        else:
+            """ CONFIG_HOTPLUG_SIZE_BITS added on 4.4 by us """
+            if not ramdump.is_config_defined('CONFIG_MEMORY_HOTPLUG'):
+                SECTION_SIZE_BITS = 30
+            else:
+                SECTION_SIZE_BITS = int(ramdump.get_config_val("CONFIG_HOTPLUG_SIZE_BITS"))
+    else:
+        SECTION_SIZE_BITS = 28
+    mm.SECTION_SIZE_BITS = SECTION_SIZE_BITS
+    return True
+
+"""
+Invoked functions should return True/False on success/Failure
+"""
+def mm_init(ramdump):
+    mm = MemoryManagementSubsystem(ramdump)
+
+    if not section_size_init(mm):
+        return False
+
+    if not sparse_init(mm):
+        return False
+
+    ramdump.mm = mm
+    return True

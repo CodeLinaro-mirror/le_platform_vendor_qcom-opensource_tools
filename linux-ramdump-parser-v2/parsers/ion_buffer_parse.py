@@ -84,7 +84,7 @@ def ion_buffer_info(self, ramdump, ion_info):
         f_count = ramdump.read_u64(file + f_count_offset)
         exp_name = ramdump.read_word(dma_buf_addr + exp_name_offset)
         exp_name = ramdump.read_cstring(exp_name, 48)
-        ionheap_name = ""
+        ionheap_name = None
         if (ramdump.kernel_version >= (5, 10)):
             if 'qcom_dma_heaps' in exp_name:
                 ion_buffer = ramdump.read_structure_field(dma_buf_addr, 'struct dma_buf', 'priv')
@@ -97,6 +97,8 @@ def ion_buffer_info(self, ramdump, ion_info):
                 ion_heap = ramdump.read_structure_field(ion_buffer, 'struct ion_buffer', 'heap')
                 ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct ion_heap', 'name')
                 ionheap_name = ramdump.read_cstring(ionheap_name_addr, TASK_NAME_LENGTH)
+        if ionheap_name is None:
+            ionheap_name = "None"
         name = ramdump.read_word(dma_buf_addr + name_offset)
         if not name:
             name = "None"
@@ -118,7 +120,6 @@ def ion_buffer_info(self, ramdump, ion_info):
                 f_count = ramdump.read_u64(file + f_count_offset)
                 exp_name = ramdump.read_word(dma_buf_addr + exp_name_offset)
                 exp_name = ramdump.read_cstring(exp_name, 48)
-                ionheap_name = ""
                 if (ramdump.kernel_version >= (5, 10)):
                     if exp_name == 'qcom_dma_heaps':
                         ion_buffer = ramdump.read_structure_field(dma_buf_addr, 'struct dma_buf', 'priv')
@@ -131,6 +132,8 @@ def ion_buffer_info(self, ramdump, ion_info):
                         ion_heap = ramdump.read_structure_field(ion_buffer, 'struct ion_buffer', 'heap')
                         ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct ion_heap', 'name')
                         ionheap_name = ramdump.read_cstring(ionheap_name_addr, TASK_NAME_LENGTH)
+                if ionheap_name is None:
+                    ionheap_name = "None"
                 name = ramdump.read_word(dma_buf_addr + name_offset)
                 if not name:
                     name = "None"
