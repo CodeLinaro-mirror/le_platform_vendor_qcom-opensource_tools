@@ -165,7 +165,8 @@ class PageTracking(RamParser):
                     stack, 'struct stack_record', 'size')
 
                 struct_holding_trace_entries = stack
-
+        if nr_trace_entries is None:
+            return -1, -1, -1, -1
         if nr_trace_entries <= 0 or nr_trace_entries > 16:
             return -1, -1, -1, -1
         if order >= self.max_order:

@@ -49,6 +49,7 @@ class GpuParser_510(RamParser):
             (self.parse_pagetables, "Process Pagetables", 'gpuinfo.txt'),
             (self.parse_gmu_data, "GMU Details", 'gpuinfo.txt'),
             (self.dump_gpu_snapshot, "GPU Snapshot", 'gpuinfo.txt'),
+            (self.dump_atomic_snapshot, "Atomic GPU Snapshot", 'gpuinfo.txt'),
             (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
             (self.parse_open_process_mementry, "Open Process Mementries",
              'open_process_mementries.txt'),
@@ -857,7 +858,7 @@ class GpuParser_510(RamParser):
 
         self.writeln('\nTrace Details:')
         self.writeln('\tStart Address: ' + strhex(hostptr))
-        self.writeln('\tSize: ' + str(size))
+        self.writeln('\tSize: ' + str_convert_to_kb(size))
 
         if size == 0:
             self.writeln('Invalid size. Aborting gmu trace dump.')
@@ -906,7 +907,7 @@ class GpuParser_510(RamParser):
 
         self.writeln('Snapshot Details:')
         self.writeln('\tStart Address: ' + strhex(snapshot_start))
-        self.writeln('\tSize: ' + str(snapshot_size))
+        self.writeln('\tSize: ' + str_convert_to_kb(snapshot_size))
         self.writeln('\tTimestamp: ' + str(snapshot_timestamp))
         self.writeln('\tProcess PID: ' + str(snapshot_pid))
 
@@ -915,7 +916,7 @@ class GpuParser_510(RamParser):
 
         if snapshot_size == 0:
             self.write('Snapshot freeze not completed.')
-            self.writeln('Dumping entire region to gpu_snapshot.bpmd')
+            self.writeln('Dumping entire region to ' + file_name)
             data = self.ramdump.read_binarystring(snapshot_start,
                                                   snapshot_memory_size)
         else:
@@ -924,5 +925,36 @@ class GpuParser_510(RamParser):
                          ' to ' + file_name)
             data = self.ramdump.read_binarystring(snapshot_start,
                                                   snapshot_size)
+        file.write(data)
+        file.close()
+
+    def dump_atomic_snapshot(self, dump):
+        atomic_snapshot_addr = dump.struct_field_addr(self.devp,
+                                                      'struct kgsl_device',
+                                                      'snapshot_atomic')
+        atomic_snapshot = dump.read_bool(atomic_snapshot_addr)
+        if not atomic_snapshot:
+            self.writeln('No atomic snapshot detected.')
+            return
+
+        atomic_snapshot_offset = dump.field_offset(
+            'struct kgsl_device', 'snapshot_memory_atomic')
+        atomic_snapshot_base = dump.read_pointer(self.devp +
+                                                 atomic_snapshot_offset)
+        atomic_snapshot_size = dump.read_u32(self.devp +
+                                             atomic_snapshot_offset + 8)
+
+        if atomic_snapshot_base == 0 or atomic_snapshot_size == 0:
+            self.writeln('Invalid atomic snapshot.')
+            return
+
+        self.writeln('Atomic Snapshot Details:')
+        self.writeln('\tStart Address: ' + strhex(atomic_snapshot_base))
+        self.writeln('\tSize: ' + str_convert_to_kb(atomic_snapshot_size))
+
+        file = self.ramdump.open_file('gpu_parser/atomic_snapshot.bpmd', 'wb')
+        data = self.ramdump.read_binarystring(atomic_snapshot_base,
+                                              atomic_snapshot_size)
+        self.writeln('\nData dumped to atomic_snapshot.bpmd')
         file.write(data)
         file.close()
