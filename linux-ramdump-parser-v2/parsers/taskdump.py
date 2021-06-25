@@ -159,7 +159,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
 
         task_last_enqueued_ts = 0
         task_last_sleep_ts = 0
-        if offset_last_enqueued_ts is None and ramdump.is_config_defined('CONFIG_SCHED_WALT'):
+        if offset_last_enqueued_ts is None and (ramdump.is_config_defined('CONFIG_SCHED_WALT') or 'sched_walt' in ramdump.ko_file_names):
             offset_last_enqueued_ts = ramdump.field_offset('struct walt_task_struct', 'last_enqueued_ts')
             if (ramdump.kernel_version >= (5, 10, 0)):
                 walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'android_vendor_data1')
@@ -171,7 +171,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
             task_last_enqueued_ts = ramdump.read_u64(next_thread_last_enqueued)
             if task_last_enqueued_ts is None:
                 task_last_enqueued_ts = 0
-        if offset_last_sleep_ts is None and ramdump.is_config_defined('CONFIG_SCHED_WALT'):
+        if offset_last_sleep_ts is None and (ramdump.is_config_defined('CONFIG_SCHED_WALT') or 'sched_walt' in ramdump.ko_file_names):
             offset_last_sleep_ts = ramdump.field_offset('struct walt_task_struct', 'last_sleep_ts ')
             if (ramdump.kernel_version >= (5, 10, 0)):
                 walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'android_vendor_data1')
@@ -216,13 +216,13 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 task_out.write(
                     '=====================================================\n')
                 first = 1
-            task_out.write('    Task name: {0} pid: {1} cpu: {2} prio: {7} start: {'
+            task_out.write('    Task name: {0} [affinity: 0x{11:x}] pid: {1} cpu: {2} prio: {7} start: {'
                            '6:x}\n    state: 0x{3:x}[{8}] exit_state: 0x{4:x}'
                            ' stack base: 0x{5:x}\n'
                            '    Last_enqueued_ts:{9:18.9f} Last_sleep_ts:{10:18.9f}\n'.format(
                 thread_task_name, thread_task_pid, task_cpu, task_state,
                 task_exit_state, addr_stack, next_thread_start, thread_task_prio, task_state_str,
-                task_last_enqueued_ts/1000000000.0, task_last_sleep_ts/1000000000.0))
+                task_last_enqueued_ts/1000000000.0, task_last_sleep_ts/1000000000.0,thread_task_affine))
             if task_on_cpu == 1:
                 taskhighlight_out.write("Task currently running on CPU. Please check dmesg_tz for callstack")
             else:

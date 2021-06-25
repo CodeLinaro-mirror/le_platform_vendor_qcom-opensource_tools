@@ -37,6 +37,7 @@ RB_PARENT_COLOR_MASK = 0xFFFFFFFFFFFFFFFC
 grand_total = 0
 TASK_NAME_LENGTH = 16
 ion_heap_buffers = []
+dmabuf_heap_names = ["qcom_dma_heaps"]
 
 
 def bytes_to_KB(bytes):
@@ -50,7 +51,34 @@ def bytes_to_mb(bytes):
         if bytes != 0:
             val = (bytes // 1024) // 1024
         return val
-        
+
+def get_dmabuf_heap_names(self, ramdump, ion_info):
+    heap_list = ramdump.address_of('heap_list')
+    if heap_list is None:
+        ion_info.write("NOTE: 'heap_list' list not found to extract the "
+                        "dmabuf heap type list")
+        return False
+
+    list_offset = ramdump.field_offset('struct dma_heap', 'list')
+    name_offset = ramdump.field_offset('struct dma_heap', 'name')
+    next_offset = ramdump.field_offset('struct list_head', 'next')
+    prev_offset = ramdump.field_offset('struct list_head', 'prev')
+
+    head = ramdump.read_word(heap_list + next_offset)
+    while (head != heap_list):
+        dma_heap_addr = head - list_offset
+        dma_heap_name_addr = ramdump.read_word(dma_heap_addr + name_offset)
+        dma_heap_name = ramdump.read_cstring(dma_heap_name_addr, 48)
+        dmabuf_heap_names.append(dma_heap_name)
+
+        head = ramdump.read_word(head + next_offset)
+        prev = ramdump.read_word(head + prev_offset)
+        if head == 0 or prev == 0:
+            ion_info.write("NOTE: 'dmabuf heap_list' is corrupted")
+            return False
+
+    return True
+
 def ion_buffer_info(self, ramdump, ion_info):
     ion_info = ramdump.open_file('ionbuffer.txt')
     db_list = ramdump.address_of('db_list')
@@ -76,6 +104,9 @@ def ion_buffer_info(self, ramdump, ion_info):
     ion_info.write("{0:40} {1:4} {2:15} {3:10} {4:10} {5:10} {6:20}\n".format(
             'File_addr', 'REF', 'Name', 'Size', 'Exp', 'Heap', 'Size in KB'))
     dma_buf_info = []
+    if get_dmabuf_heap_names(self, ramdump, ion_info) is False:
+        return
+
     while (head != db_list):
         dma_buf_addr = head - list_node_offset
         size = ramdump.read_word(dma_buf_addr + size_offset)
@@ -86,7 +117,7 @@ def ion_buffer_info(self, ramdump, ion_info):
         exp_name = ramdump.read_cstring(exp_name, 48)
         ionheap_name = None
         if (ramdump.kernel_version >= (5, 10)):
-            if 'qcom_dma_heaps' in exp_name:
+            if exp_name in dmabuf_heap_names:
                 ion_buffer = ramdump.read_structure_field(dma_buf_addr, 'struct dma_buf', 'priv')
                 ion_heap = ramdump.read_structure_field(ion_buffer, 'struct qcom_sg_buffer', 'heap')
                 ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct dma_heap', 'name')
@@ -121,7 +152,7 @@ def ion_buffer_info(self, ramdump, ion_info):
                 exp_name = ramdump.read_word(dma_buf_addr + exp_name_offset)
                 exp_name = ramdump.read_cstring(exp_name, 48)
                 if (ramdump.kernel_version >= (5, 10)):
-                    if exp_name == 'qcom_dma_heaps':
+                    if exp_name in dmabuf_heap_names:
                         ion_buffer = ramdump.read_structure_field(dma_buf_addr, 'struct dma_buf', 'priv')
                         ion_heap = ramdump.read_structure_field(ion_buffer, 'struct qcom_sg_buffer', 'heap')
                         ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct dma_heap', 'name')

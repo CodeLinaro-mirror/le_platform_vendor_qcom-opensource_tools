@@ -114,8 +114,10 @@ if __name__ == '__main__':
                       help='Run an interactive python interpreter with the ramdump loaded')
     parser.add_option('', '--classic-shell', action='store_true',
                       help='Like --shell, but forces the use of the classic python shell, even if ipython is installed')
-    parser.add_option('', '--qtf', action='store_true', dest='qtf',
+    parser.add_option('', '--qtf', action='store_true', dest='ftrace_format',
                       help='Use QTF tool to parse and save QDSS trace data')
+    parser.add_option('', '--ftrace-formats', action='store_true', dest='ftrace_format',
+                      help='Extracts formats.txt used for generating ftrace')
     parser.add_option('', '--qtf-path', dest='qtf_path',
                       help='QTF tool executable')
     parser.add_option('', '--skip-qdss-bin', action='store_true',

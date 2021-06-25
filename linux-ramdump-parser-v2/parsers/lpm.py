@@ -164,6 +164,9 @@ class lpm(RamParser):
         name += ":idle_states:S{}"
 
         state_count = self.ramdump.read_structure_field(node, 'struct generic_pm_domain', 'state_count')
+        #sanity check for state count , CPUIDLE_STATE_MAX
+        if state_count >= 10:
+            return
         accounting_time = self.ramdump.read_structure_field(node, 'struct generic_pm_domain', 'accounting_time')
         gpd_power_state_size = self.ramdump.sizeof('struct genpd_power_state')
         power_state_offset = self.ramdump.field_offset('struct generic_pm_domain', 'states')

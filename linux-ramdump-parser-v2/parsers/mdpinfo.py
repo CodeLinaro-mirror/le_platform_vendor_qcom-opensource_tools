@@ -47,7 +47,7 @@ class SdeDbgBase(Struct):
     _fields = {
             'evtlog': Struct.get_pointer,
             'reglog': Struct.get_pointer,
-            'reg_base_list': Struct.get_pointer,
+            'reg_base_list': Struct.get_address,
             'enable_reg_dump' : Struct.get_u32,
             'panic_on_err' : Struct.get_u32,
             'dbgbus_sde': Struct.get_address,

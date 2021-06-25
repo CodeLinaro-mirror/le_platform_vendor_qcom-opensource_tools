@@ -161,7 +161,6 @@ class DebugImage_v2():
     def __init__(self, ramdump):
         self.qdss = QDSSDump()
         self.dump_type_lookup_table = []
-        self.dump_table_id_lookup_table = []
         self.dump_data_id_lookup_table  = {}
         if ramdump.kernel_version > (3, 9, 9):
             self.event_call = 'struct trace_event_call'
@@ -243,8 +242,6 @@ class DebugImage_v2():
     def parse_cpu_ctx(self, version, start, end, client_id, ram_dump):
         core = client_id - client.MSM_DUMP_DATA_CPU_CTX
 
-        print_out_str(
-            'Parsing CPU{2} context start {0:x} end {1:x} version {3} client_id-> {4}'.format(start, end, core,version,client_id))
         if version == 32 or version == "32":
             try:
                 cpu_type_offset  = ram_dump.field_offset(
@@ -283,12 +280,14 @@ class DebugImage_v2():
                                 'struct msm_dump_cpu_register_entry', 'regset_addr')
                 if regset_addr_offset is None:
                     regset_addr_offset = 0x8
-
+                cpu_index = ram_dump.read_u32(start + cpu_index_offset,False)
+                
+                print_out_str(
+                    'Parsing CPU{2:x} context start {0:x} end {1:x} version {3} client_id-> {4:x}'.format(start, end, cpu_index,version,client_id))
                 cpu_type = ram_dump.read_u32(start + cpu_type_offset,False)
                 print_out_str("cpu_type = {0}".format(msm_dump_cpu_type[cpu_type]))
                 ctx_type = ram_dump.read_u32(start + ctx_type_offset,False)
                 print_out_str("ctx_type = {0}".format(msm_dump_ctx_type[ctx_type]))
-                cpu_index = ram_dump.read_u32(start + cpu_index_offset,False)
                 print_out_str("cpu_index = {0}".format(cpu_index))
                 regset_num_register = ram_dump.read_u32(start + regset_num_register_offset,False)
                 registers = start + registers_offset
@@ -534,9 +533,7 @@ class DebugImage_v2():
         self.formats_out.write("print fmt: {0}\n".format(fmt_str))
 
     def collect_ftrace_format(self, ram_dump):
-        formats = os.path.join('qtf', 'map_files', 'formats.txt')
-        formats_out = ram_dump.open_file(formats)
-        self.formats_out = formats_out
+        self.formats_out = ram_dump.open_file('formats.txt')
 
         ftrace_events_list = ram_dump.address_of('ftrace_events')
         next_offset = ram_dump.field_offset(self.event_call, 'list')
@@ -544,166 +541,6 @@ class DebugImage_v2():
         list_walker.walk_prev(ftrace_events_list, self.ftrace_events_func, ram_dump)
 
         self.formats_out.close
-
-    def wait_for_completion_timeout(self, task, timeout):
-        delay = 2.0
-        #while the process is still executing and we haven't timed-out yet
-        while task.poll() is None and timeout > 0:
-            time.sleep(delay)
-            timeout -= delay
-        if timeout <= 0:
-            print_out_str("QTF command timed out")
-            task.kill()
-
-    def parse_qtf(self, ram_dump):
-        out_dir = ram_dump.outdir
-        if platform.system() != 'Windows':
-            return
-
-        qtf_path = ram_dump.qtf_path
-        if qtf_path is None:
-            try:
-                import local_settings
-                try:
-                    qtf_path = local_settings.qtf_path
-                except AttributeError as e:
-                    print_out_str("attribute qtf_path in local_settings.py looks bogus. Please see README.txt")
-                    print_out_str("Full message: %s" % e.message)
-                    return
-            except ImportError:
-                print_out_str("missing qtf_path local_settings.")
-                print_out_str("Please see the README for instructions on setting up local_settings.py")
-                return
-
-        if qtf_path is None:
-            print_out_str("!!! Incorrect path for qtf specified.")
-            print_out_str("!!! Please see the README for instructions on setting up local_settings.py")
-            return
-
-        if not os.path.exists(qtf_path):
-            print_out_str("!!! qtf_path {0} does not exist! Check your settings!".format(qtf_path))
-            return
-
-        if not os.access(qtf_path, os.X_OK):
-            print_out_str("!!! No execute permissions on qtf path {0}".format(qtf_path))
-            return
-
-        if os.path.getsize(os.path.join(out_dir, 'tmc-etf.bin')) > 0:
-            trace_file = os.path.join(out_dir, 'tmc-etf.bin')
-        elif os.path.getsize(os.path.join(out_dir, 'tmc-etr.bin')) > 0:
-            trace_file = os.path.join(out_dir, 'tmc-etr.bin')
-        else:
-            return
-
-        port = None
-        server_proc = None
-        qtf_success = False
-        max_tries = 3
-        qtf_dir = os.path.join(out_dir, 'qtf')
-        workspace = os.path.join(qtf_dir, 'qtf.workspace')
-        qtf_out = os.path.join(out_dir, 'qtf.txt')
-        chipset = ram_dump.hw_id
-        if "sdm" not in ram_dump.hw_id.lower() and \
-          "qcs" not in ram_dump.hw_id.lower():
-            chipset = "msm" + ram_dump.hw_id
-        hlos = 'LA'
-
-        #Temp change to handle descripancy between tools usage
-        if chipset == 'msmcobalt':
-            chipset = 'msm8998'
-
-        # Resolve any port collisions with other running qtf_server instances
-        for tries in range(max_tries):
-            port = random.randint(12000, 13000)
-            server_proc = subprocess.Popen(
-                [qtf_path, '-s', '{:d}'.format(port)], shell=True,stderr=subprocess.PIPE)
-            time.sleep(15)
-            server_proc.poll()
-            if server_proc.returncode == 1:
-                server_proc.terminate()
-                continue
-            else:
-                qtf_success = True
-                break
-        if not qtf_success:
-            server_proc.terminate()
-            print_out_str('!!! Could not open a QTF server instance with a '
-                          'unique port (last port tried: '
-                          '{0})'.format(str(port)))
-            print_out_str('!!! Please kill all currently running qtf_server '
-                          'processes and try again')
-            return
-        #subprocess.call('{0} -c {1} new workspace {2} {3} {4}'.format(qtf_path, port, qtf_dir, chipset, hlos))
-        server_proc1 = subprocess.Popen(
-                   [qtf_path, '-c', '{:d}'.format(port),'new workspace {0} {1} {2}'.format(qtf_dir, chipset, hlos)], shell=True,stderr=subprocess.PIPE,stdout=subprocess.PIPE)
-        server_proc1.communicate()
-        self.collect_ftrace_format(ram_dump)
-        server_proc1.kill()
-
-        p = subprocess.Popen('{0} -c {1} open workspace {2}'.format(qtf_path, port, workspace))
-        self.wait_for_completion_timeout(p,60)
-        p = subprocess.Popen('{0} -c {1} open bin {2}'.format(qtf_path, port, trace_file))
-        self.wait_for_completion_timeout(p,90)
-        p = subprocess.Popen('{0} -c {1} stream trace table {2}'.format(qtf_path, port, qtf_out))
-        self.wait_for_completion_timeout(p,300)
-        p = subprocess.Popen('{0} -c {1} close'.format(qtf_path, port))
-        self.wait_for_completion_timeout(p,60)
-        p = subprocess.Popen('{0} -c {1} exit'.format(qtf_path, port))
-        self.wait_for_completion_timeout(p,60)
-        try:
-            import psutil
-            pid = server_proc.pid
-            pid = int(pid)
-            parent = psutil.Process(pid)
-            # or parent.children() for recursive=False
-            for child in parent.children(recursive=True):
-                print_out_str("child process = {0} which needs to be killed forcefully after QTF timeout".format(child))
-                if (psutil.pid_exists(child.pid)):
-                    try:
-                        child.kill()
-                    except Exception as e:
-                        print_out_str("Error: {0} while killing the child of QTF process".format(e))
-                        pass
-            server_proc.kill()
-        except Exception as e1:
-            print_out_str("psutil module import error = {0}".format(e1))
-            pass
-
-    def parse_dcc(self, ram_dump):
-        out_dir = ram_dump.outdir
-        if ram_dump.ram_addr is None:
-            bin_dir = ram_dump.autodump
-        else:
-            bin_dir = ram_dump.ram_addr
-            bin_dir="\\".join(bin_dir[0][0].split('\\')[:-1])
-        dcc_parser_path = os.path.join(os.path.dirname(__file__), '..', 'dcc_parser', 'dcc_parser.py')
-        if dcc_parser_path is None:
-            print_out_str("!!! Incorrect path for DCC specified.")
-            return
-
-        if not os.path.exists(dcc_parser_path):
-            print_out_str("!!! dcc_parser_path {0} does not exist! Check your settings!".format(dcc_parser_path))
-            return
-
-        if (os.path.isfile(os.path.join(bin_dir, 'DCC_SRAM.BIN'))):
-            sram_file = os.path.join(bin_dir, 'DCC_SRAM.BIN')
-            cmd = [sys.executable, dcc_parser_path, "-s" , sram_file, "--out-dir", out_dir, "--config-offset", "0x6000", "--v2"]
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT,
-                                 universal_newlines=True)
-            print_out_str('--------')
-            print_out_str(p.communicate()[0])
-        elif os.path.isfile(os.path.join(out_dir, 'sram.bin')):
-            sram_file = os.path.join(out_dir, 'sram.bin')
-            p = subprocess.Popen([sys.executable, dcc_parser_path, '-s', sram_file, '--out-dir', out_dir],
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT,
-                                 universal_newlines=True)
-            print_out_str('--------')
-            print_out_str(p.communicate()[0])
-        else:
-            print_out_str('DCC SRAM data is not populated!!')
-            return
 
     def parse_sysreg(self,ram_dump):
         out_dir = ram_dump.outdir
@@ -841,8 +678,6 @@ class DebugImage_v2():
     def parse_dump_v2(self, ram_dump):
         self.dump_type_lookup_table = ram_dump.gdbmi.get_enum_lookup_table(
             'msm_dump_type', 2)
-        self.dump_table_id_lookup_table = ram_dump.gdbmi.get_enum_lookup_table(
-            'msm_dump_table_ids', MAX_NUM_ENTRIES)
         cpus = ram_dump.get_num_cpus()
         # per cpu entries
         for i in range(0, cpus):
@@ -978,11 +813,6 @@ class DebugImage_v2():
                 entry_type = ram_dump.read_u32(this_entry + dump_entry_type_offset, virtual = False)
                 entry_addr = ram_dump.read_word(this_entry + dump_entry_addr_offset, virtual = False)
 
-                if entry_id < 0 or entry_id > len(self.dump_table_id_lookup_table):
-                    print_out_str(
-                        '!!! Invalid dump table entry id found {0:x}'.format(entry_id))
-                    continue
-
                 if entry_type > len(self.dump_type_lookup_table):
                     print_out_str(
                         '!!! Invalid dump table entry type found {0:x}'.format(entry_type))
@@ -1000,8 +830,8 @@ class DebugImage_v2():
                     return
 
                 print_out_str(
-                    'Debug image version: {0}.{1} Entry id: {2} Entry type: {3} Number of entries: {4}'.format(
-                        table_version >> 20, table_version & 0xFFFFF, self.dump_table_id_lookup_table[entry_id],
+                    'Debug image version: {0}.{1} Entry type: {2} Number of entries: {3}'.format(
+                        table_version >> 20, table_version & 0xFFFFF,
                         self.dump_type_lookup_table[entry_type], table_num_entries))
 
                 lst = self.sorted_dump_data_clients(
@@ -1090,10 +920,6 @@ class DebugImage_v2():
                 entry_pa_addr = ram_dump.read_u64(this_entry + dump_entry_pa_offset)
                 entry_size = ram_dump.read_u64(this_entry + dump_entry_size_offset)
 
-                if entry_id < 0 or entry_id > len(self.dump_table_id_lookup_table):
-                    print_out_str(
-                        '!!! Invalid dump table entry id found {0:x}'.format(entry_id))
-                    continue
                 end_addr = entry_pa_addr + entry_size
                 minidump_dump_table_value = dict(minidump_dump_table_type)
                 if entry_pa_addr in ram_dump.ebi_pa_name_map:
@@ -1109,8 +935,6 @@ class DebugImage_v2():
                         getattr(DebugImage_v2, func)(
                             self, 20, client_entry,
                             client_end, client_id, ram_dump)
-
-        self.parse_dcc(ram_dump)
         if ram_dump.sysreg:
             self.parse_sysreg(ram_dump)
         self.qdss.dump_standard(ram_dump)
@@ -1118,6 +942,6 @@ class DebugImage_v2():
             self.qdss.save_etf_bin(ram_dump)
             self.qdss.save_etf_swao_bin(ram_dump)
             self.qdss.save_etr_bin(ram_dump)
-        if ram_dump.qtf:
-            self.parse_qtf(ram_dump)
+        if ram_dump.ftrace_format:
+            self.collect_ftrace_format(ram_dump)
 

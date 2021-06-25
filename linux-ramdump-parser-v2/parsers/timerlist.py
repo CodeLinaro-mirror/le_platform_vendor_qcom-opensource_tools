@@ -69,7 +69,7 @@ class TimerList(RamParser) :
         else:
            data = ""
 
-        if function == "delayed_work_timer_fn":
+        if function.split('[')[0] == "delayed_work_timer_fn":
             timer_list_offset = self.ramdump.field_offset('struct delayed_work', 'timer')
             work_addr = node - timer_list_offset
             func_addr = work_addr + self.ramdump.field_offset('struct work_struct', 'func')

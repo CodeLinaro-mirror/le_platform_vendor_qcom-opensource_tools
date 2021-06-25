@@ -598,6 +598,7 @@ class RamDump():
         self.arm64 = options.arm64
         self.ndk_compatible = False
         self.lookup_table = []
+        self.ko_file_names = []
 
         if gdb_ndk_path:
             self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
@@ -624,7 +625,7 @@ class RamDump():
         self.page_offset = 0xc0000000
         self.thread_size = 8192
         self.qtf_path = options.qtf_path
-        self.qtf = options.qtf
+        self.ftrace_format = options.ftrace_format
         self.skip_qdss_bin = options.skip_qdss_bin
         self.debug = options.debug
         self.dcc = False
@@ -1370,7 +1371,7 @@ class RamDump():
             elif is_cortex_a53:
                 t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             else:
-                t32_binary = 'c:\\t32\\t32MARM.exe'
+                t32_binary = 'c:\\T32\\bin\\windows64\\t32MARM.exe'
             t32_bat.write(('start '+ t32_binary + ' -c ' + out_path + '/t32_config.t32, ' +
                           out_path + '/t32_startup_script.cmm'))
             t32_bat.close()
@@ -1742,6 +1743,7 @@ class RamDump():
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
                 ko_file_list[name] = file
+                self.ko_file_names.append(name)
             self.walk_depth(path, on_file)
 
         for mod_tbl_ent in self.module_table.module_table:
@@ -1885,8 +1887,9 @@ class RamDump():
         else:
             addr1 = addr
         #print "hex of address in get_symbol_info1 {0}".format(hex(addr1))
+        addr1, desc = self.step_through_jump_table(addr1)
         symbol_obj =  self.gdbmi.get_symbol_info(addr1)
-        return symbol_obj.symbol
+        return symbol_obj.symbol + desc
 
     def type_of(self, symbol):
         """
@@ -1948,6 +1951,30 @@ class RamDump():
                 except gdbmi.GdbMIException:
                     pass
 
+    def step_through_jump_table(self, addr):
+        """
+        Steps through a jump table, if the address points to a unconditional branch
+        """
+
+        if addr is None:
+            return addr, ''
+
+        fn_addr = addr
+        if self.is_config_defined('CONFIG_ARM64_BTI_KERNEL'):
+            # Skip past BTI instruction to the real branch instr
+            fn_addr += 4
+        if self.cpu_type in ['ARMV9-A', 'CORTEXA53']:
+            instr = self.read_u32(fn_addr)
+            if instr is None or (instr & 0xFC000000) != 0x14000000:
+                return addr, ''
+            imm26_mask = 0x3FFFFFF
+            offset = instr & imm26_mask
+            if (offset & imm26_mask) >> 25:
+                offset -= (imm26_mask + 1)
+            fn_addr += 4 * offset
+            return fn_addr, '[jt]'
+        return addr, ''
+
     def unwind_lookup(self, addr, symbol_size=0):
         """
         Returns closest symbols <= addr and either the relative offset
@@ -1961,6 +1988,8 @@ class RamDump():
         table = self.lookup_table
         low = 0
         high = len(self.lookup_table) - 1
+
+        addr, desc = self.step_through_jump_table(addr)
 
         if addr is None or addr < table[low][0] or addr > table[high][0]:
             return None
@@ -1990,9 +2019,9 @@ class RamDump():
             size = table[low + 1][0] - table[low][0]
 
         if symbol_size == 0:
-            return (table[low][1], offset)
+            return (table[low][1] + desc, offset)
         else:
-            return (table[low][1], size)
+            return (table[low][1] + desc, size)
 
     def read_physical(self, addr, length):
         if not isinstance(addr, int) or not isinstance(length, int):

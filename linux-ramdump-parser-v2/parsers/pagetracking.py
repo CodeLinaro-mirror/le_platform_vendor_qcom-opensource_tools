@@ -23,13 +23,6 @@ class PageTracking(RamParser):
     def __init__(self, *args):
         super(PageTracking, self).__init__(*args)
         self.trace_entry_size = self.ramdump.sizeof('unsigned long')
-        if self.ramdump.is_config_defined('CONFIG_SPARSEMEM'):
-            self.page_ext_offset = self.ramdump.field_offset(
-                            'struct mem_section', 'page_ext')
-        else:
-            self.page_ext_offset = self.ramdump.field_offset(
-                            'struct pglist_data', 'node_page_ext')
-
         self.trace_offset = 0
         self.nr_entries_offset = 0
         self.trace_entries_offset = 0
@@ -99,8 +92,7 @@ class PageTracking(RamParser):
             phys = pfn << 12
             if phys is None or phys == 0:
                 return -1, -1, -1, -1
-            mem_section = pfn_to_section(self.ramdump, pfn)
-            page_ext = self.ramdump.read_word(mem_section + self.page_ext_offset)
+            page_ext = self.ramdump.mm.lookup_page_ext(pfn)
             """
             page_ext will be null here if the first page of a section is not valid.
             See page_ext_init().
