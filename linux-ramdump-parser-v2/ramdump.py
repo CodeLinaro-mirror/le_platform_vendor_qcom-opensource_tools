@@ -598,6 +598,7 @@ class RamDump():
         self.arm64 = options.arm64
         self.ndk_compatible = False
         self.lookup_table = []
+        self.ko_file_names = []
 
         if gdb_ndk_path:
             self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
@@ -624,7 +625,7 @@ class RamDump():
         self.page_offset = 0xc0000000
         self.thread_size = 8192
         self.qtf_path = options.qtf_path
-        self.qtf = options.qtf
+        self.ftrace_format = options.ftrace_format
         self.skip_qdss_bin = options.skip_qdss_bin
         self.debug = options.debug
         self.dcc = False
@@ -1208,7 +1209,6 @@ class RamDump():
 
         if not self.minidump:
             if self.arm64:
-                startup_script.write('Register.Set NS 1\n')
                 if self.svm:
                     startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
                     self.ttbr_data))
@@ -1256,15 +1256,8 @@ class RamDump():
                         startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
                         startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
 
-                startup_script.write('TRANSlation.COMMON NS:0xF000000000000000--0xffffffffffffffff\n')
-                startup_script.write('trans.tablewalk on\n')
-                startup_script.write('trans.on\n')
-                if not self.svm:
-                    startup_script.write('Register.Set CPSR 0x3C5\n')
-                    startup_script.write('MMU.Delete\n')
-                    startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
-                    startup_script.write('mmu.on\n')
-                    startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                    startup_script.write('Register.Set NS 1\n')
+                    startup_script.write('Register.Set CPSR 0x1C5\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
@@ -1292,12 +1285,22 @@ class RamDump():
         dloadelf = 'data.load.elf {} /nocode\n'.format(where)
         startup_script.write(dloadelf)
 
+        if self.arm64:
+            startup_script.write('TRANSlation.COMMON NS:0xF000000000000000--0xffffffffffffffff\n')
+            startup_script.write('trans.tablewalk on\n')
+            startup_script.write('trans.on\n')
+            if not self.svm and self.cpu_type != 'ARMV9-A':
+                startup_script.write('MMU.Delete\n')
+                startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
+                startup_script.write('mmu.on\n')
+                startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+
         if t32_host_system != 'Linux':
             if self.arm64:
                 startup_script.write(
-                     'task.config C:\\T32\\demo\\arm64\\kernel\\linux\\linux-3.x\\linux3.t32\n')
+                     'task.config C:\\T32\\demo\\arm64\\kernel\\linux\\awareness\\linux.t32 /ACCESS NS:\n')
                 startup_script.write(
-                     'menu.reprogram C:\\T32\\demo\\arm64\\kernel\\linux\\linux-3.x\\linux.men\n')
+                     'menu.reprogram C:\\T32\\demo\\arm64\\kernel\\linux\\awareness\\linux.men\n')
             else:
                 if self.kernel_version > (3, 0, 0):
                     startup_script.write(
@@ -1327,15 +1330,25 @@ class RamDump():
                     startup_script.write(
                         'menu.reprogram /opt/t32/demo/arm/kernel/linux/linux.men\n')
 
-        for mod_tbl_ent in self.module_table.module_table:
-            mod_sym_path = mod_tbl_ent.get_sym_path()
-            if mod_sym_path != '':
-                where = os.path.abspath(mod_sym_path)
-                if 'wlan' in mod_tbl_ent.name:
-                    ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
-                else:
-                    ld_mod_sym = "Data.LOAD.Elf " + where + " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
-                startup_script.write(ld_mod_sym)
+        if self.cpu_type == 'ARMV9-A':
+            mod_dir = os.path.dirname(self.vmlinux)
+            mod_dir = os.path.abspath(mod_dir)
+            startup_script.write('sYmbol.AUTOLOAD.CHECKCOMMAND  ' + '"do C:\\T32\\demo\\arm64\\kernel\\linux\\awareness\\autoload.cmm"' + '\n')
+            startup_script.write('sYmbol.SourcePATH.Set ' + '"' + mod_dir + '"' + "\n")
+            startup_script.write('TASK.sYmbol.Option AutoLoad Module\n')
+            startup_script.write('TASK.sYmbol.Option AutoLoad noprocess\n')
+            startup_script.write('sYmbol.AutoLOAD.List\n')
+            startup_script.write('sYmbol.AutoLOAD.CHECK\n')
+        else:
+            for mod_tbl_ent in self.module_table.module_table:
+                mod_sym_path = mod_tbl_ent.get_sym_path()
+                if mod_sym_path != '':
+                    where = os.path.abspath(mod_sym_path)
+                    if 'wlan' in mod_tbl_ent.name:
+                        ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
+                    else:
+                        ld_mod_sym = "Data.LOAD.Elf " + where + " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
+                    startup_script.write(ld_mod_sym)
 
         if not self.minidump:
             startup_script.write('task.dtask\n')
@@ -1358,7 +1371,7 @@ class RamDump():
             elif is_cortex_a53:
                 t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             else:
-                t32_binary = 'c:\\t32\\t32MARM.exe'
+                t32_binary = 'c:\\T32\\bin\\windows64\\t32MARM.exe'
             t32_bat.write(('start '+ t32_binary + ' -c ' + out_path + '/t32_config.t32, ' +
                           out_path + '/t32_startup_script.cmm'))
             t32_bat.close()
@@ -1730,6 +1743,7 @@ class RamDump():
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
                 ko_file_list[name] = file
+                self.ko_file_names.append(name)
             self.walk_depth(path, on_file)
 
         for mod_tbl_ent in self.module_table.module_table:

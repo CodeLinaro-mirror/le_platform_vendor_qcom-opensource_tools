@@ -1,4 +1,4 @@
-# Copyright (c) 2015, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2015, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -11,7 +11,10 @@
 
 from print_out import print_out_str
 from parser_util import register_parser, RamParser
+import linux_list as llist
 
+TSENS_MAX_SENSORS = 16
+DEBUG_SIZE = 10
 
 @register_parser(
     '--thermal-info', 'Useful information from thermal data structures')
@@ -75,10 +78,47 @@ class Thermal_info(RamParser):
             time_stamp,
             sensor_mapping)
 
+    def list_func(self, tsens_device_p):
+        dev_o = self.ramdump.field_offset('struct tsens_device', 'dev')
+        dev = self.ramdump.read_word(dev_o + tsens_device_p)
+        kobj_o = self.ramdump.field_offset('struct device', ' kobj')
+        kobj = (dev + kobj_o)
+        name_o = self.ramdump.field_offset('struct kobject', 'name')
+        name_addr = self.ramdump.read_word(name_o + kobj)
+        name = self.ramdump.read_cstring(name_addr)
+        if name is not None:
+            print("%s" % (name), file=self.output_file)
+            tsens_dbg_o = self.ramdump.field_offset('struct tsens_device', 'tsens_dbg')
+            tsens_dbg = tsens_device_p + tsens_dbg_o
+            sensor_dbg_info_o = self.ramdump.field_offset('struct tsens_dbg_context', 'sensor_dbg_info')
+            sensor_dbg_info = sensor_dbg_info_o  + tsens_dbg
+            self.output_file.write('v.v (struct tsens_device)0x{:8x} 0x{:8x}\n'.format(tsens_device_p, sensor_dbg_info))
+            for i in range(0, TSENS_MAX_SENSORS):
+                idx = self.ramdump.read_u32(self.ramdump.array_index(sensor_dbg_info, 'struct tsens_dbg', i))
+                tsens_dbg_addr = self.ramdump.array_index(sensor_dbg_info, 'struct tsens_dbg', i)
+                print ("    idx: %d tsens_dbg_addr 0x%x" %(idx, tsens_dbg_addr), file=self.output_file)
+                time_stmp_o = self.ramdump.field_offset('struct tsens_dbg', 'time_stmp')
+                temp_o = self.ramdump.field_offset('struct tsens_dbg', 'temp')
+                print("             time_stmp       temp ", file=self.output_file)
+                for j in range(0, DEBUG_SIZE):
+                    time_stmp = self.ramdump.read_word(self.ramdump.array_index(time_stmp_o + tsens_dbg_addr, 'unsigned long long', j))
+                    temp = self.ramdump.read_u64(
+                    self.ramdump.array_index(temp_o + tsens_dbg_addr, 'unsigned long', j))
+                    print("             %d   %d" % (time_stmp, temp), file=self.output_file)
+
+
+    def get_thermal_info(self):
+        tsens_device_list = self.ramdump.address_of('tsens_device_list')
+        list_offset = self.ramdump.field_offset('struct tsens_device', 'list')
+        list_walker = llist.ListWalker(self.ramdump, tsens_device_list, list_offset)
+        list_walker.walk(tsens_device_list, self.list_func)
+
     def parse(self):
         self.output_file = self.ramdump.open_file('thermal_info.txt')
-
-        self.tmdev_data(self.ramdump)
+        if self.ramdump.kernel_version >= (5, 4):
+            self.get_thermal_info()
+        else:
+            self.tmdev_data(self.ramdump)
 
         self.output_file.close()
         print_out_str("--- Wrote the output to thermal_info.txt")

@@ -22,7 +22,8 @@ class GpuParser(RamParser):
         super(GpuParser, self).__init__(dump)
 
     def parse(self):
-        if not self.ramdump.is_config_defined('CONFIG_QCOM_KGSL'):
+        if not (self.ramdump.is_config_defined('CONFIG_QCOM_KGSL') or
+                'msm_kgsl' in self.ramdump.ko_file_names):
             print_out_str(
                 "No GPU support detected... Skipping GPU parser.")
             return

@@ -12,12 +12,19 @@
 from parser_util import register_parser, RamParser
 import os
 import linux_list as llist
+import linux_radix_tree
 
 VM_ALLOC = 0x00000002
 
 
 @register_parser('--print-memstat', 'Print memory stats ')
 class MemStats(RamParser):
+    def __init__(self, dump):
+        super(MemStats, self).__init__(dump)
+
+        if (self.ramdump.kernel_version >= (5, 4)):
+            self.zram_dev_rtw = linux_radix_tree.RadixTreeWalker(self.ramdump)
+            self.zram_mem_mb = 0
 
     def list_func(self, vmlist):
         vm = self.ramdump.read_word(vmlist + self.vm_offset)
@@ -148,6 +155,21 @@ class MemStats(RamParser):
         grandtotal = self.bytes_to_mb(grandtotal)
         return grandtotal
 
+    def calculate_zram_dev_mem_allocated(self, zram):
+        mem_pool = zram + self.ramdump.field_offset('struct zram', 'mem_pool')
+        mem_pool = self.ramdump.read_word(mem_pool)
+
+        pages_allocated = mem_pool + self.ramdump.field_offset('struct zs_pool',
+                                                              'pages_allocated')
+
+        stat_val = self.ramdump.read_word(pages_allocated)
+        if stat_val is None:
+            stat_val = 0
+        else:
+            stat_val = self.pages_to_mb(stat_val)
+
+        self.zram_mem_mb += stat_val
+
     def print_mem_stats(self, out_mem_stat):
         # Total memory
         if(self.ramdump.kernel_version > (4, 20, 0)):
@@ -217,43 +239,42 @@ class MemStats(RamParser):
             if zram_index_idr is None:
                 stat_val = 0
             else:
-                #From Kernel 9.5, The 'struct radix_tree_root', 'rnode' is replaced by 'struct xarray', 'xa_head'
-                #   refer LA.UM.9.14/kernel/msm-5.4/include/linux/xarray.h
+                #'struct radix_tree_root' was replaced by 'struct xarray' on kernel 5.4+
                 if self.ramdump.kernel_version >= (5, 4):
-                    idr_layer_ary_offset = self.ramdump.field_offset(
-                            'struct xarray', 'xa_head')
-                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                    self.zram_dev_rtw.walk_radix_tree(zram_index_idr,
+                                          self.calculate_zram_dev_mem_allocated)
+                    stat_val = self.zram_mem_mb
+                else:
+                    if self.ramdump.kernel_version >= (4, 14):
+                        idr_layer_ary_offset = self.ramdump.field_offset(
+                                    'struct radix_tree_root', 'rnode')
+                        idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                                    idr_layer_ary_offset)
+                    else:
+                        idr_layer_ary_offset = self.ramdump.field_offset(
+                                    'struct idr_layer', 'ary')
+                        idr_layer_ary = self.ramdump.read_word(zram_index_idr +
                                                            idr_layer_ary_offset)
-                elif self.ramdump.kernel_version >= (4, 14):
-                    idr_layer_ary_offset = self.ramdump.field_offset(
-                            'struct radix_tree_root', 'rnode')
-                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
-                                                   idr_layer_ary_offset)
-                else:
-                    idr_layer_ary_offset = self.ramdump.field_offset(
-                                'struct idr_layer', 'ary')
-                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
-                                                       idr_layer_ary_offset)
-                try:
-                    zram_meta = idr_layer_ary + self.ramdump.field_offset(
-                                    'struct zram', 'meta')
-                    zram_meta = self.ramdump.read_word(zram_meta)
-                    mem_pool = zram_meta + self.ramdump.field_offset(
-                            'struct zram_meta', 'mem_pool')
-                    mem_pool = self.ramdump.read_word(mem_pool)
-                except TypeError:
-                    mem_pool = idr_layer_ary + self.ramdump.field_offset(
-                                'struct zram', 'mem_pool')
-                    mem_pool = self.ramdump.read_word(mem_pool)
-                if mem_pool is None:
-                    stat_val = 0
-                else:
-                    page_allocated = mem_pool + self.ramdump.field_offset(
-                                    'struct zs_pool', 'pages_allocated')
-                    stat_val = self.ramdump.read_word(page_allocated)
-                    if stat_val is None:
+                    try:
+                        zram_meta = idr_layer_ary + self.ramdump.field_offset(
+                                        'struct zram', 'meta')
+                        zram_meta = self.ramdump.read_word(zram_meta)
+                        mem_pool = zram_meta + self.ramdump.field_offset(
+                                'struct zram_meta', 'mem_pool')
+                        mem_pool = self.ramdump.read_word(mem_pool)
+                    except TypeError:
+                        mem_pool = idr_layer_ary + self.ramdump.field_offset(
+                                    'struct zram', 'mem_pool')
+                        mem_pool = self.ramdump.read_word(mem_pool)
+                    if mem_pool is None:
                         stat_val = 0
-                    stat_val = self.pages_to_mb(stat_val)
+                    else:
+                        page_allocated = mem_pool + self.ramdump.field_offset(
+                                        'struct zs_pool', 'pages_allocated')
+                        stat_val = self.ramdump.read_word(page_allocated)
+                        if stat_val is None:
+                            stat_val = 0
+                        stat_val = self.pages_to_mb(stat_val)
         else:
             zram_devices_word = self.ramdump.read_word('zram_devices')
             if zram_devices_word is not None:

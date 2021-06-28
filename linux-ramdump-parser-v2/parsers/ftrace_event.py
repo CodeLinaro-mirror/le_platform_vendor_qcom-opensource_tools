@@ -550,105 +550,109 @@ class FtraceParser_Event(object):
                 fmt_str =  fmt_str.replace('work struct','work_struct')
             offset_data = event_data[0]
             fmt_name_value_map = OrderedDict()
-            d = str(fmt_str.split('",')[1].replace("'", ''))
-            pr = str(fmt_str.split('",')[0].replace("'", ''))
-            pr = str(pr.split('",')[0].replace('"', ''))
-            pr = str(pr.split('",')[0].replace('[', ''))
-            pr = str(pr.split('",')[0].replace(']', ''))
-            if "cpuhp_latency" == event_name:
-                pr = pr.replace("USEC ret: %d","USEC_ret:%d")
-            if "thermal_device_update" == event_name:
-                pr = pr.replace("received event","received_event")
-            temp_a = []
-            for ii in d.split(","):
-                ii = str(ii).replace("'","").replace(" ","")
-                temp_a.append(ii)
-            j = 0
-            temp_a = []
-            pr_f = []
-            if "workqueue_execute" in event_name:
-                for ki in pr.split(": "):
-                    pr_f.append(str(ki))
-            else:
-                if ", " in pr and event_name != 'user_fault':
-                    for ki in pr.split(", "):
-                        if len(ki) >= 1:
-                            pr_f.append(str(ki).replace(" ",""))
+            try:
+                d = str(fmt_str.split('",')[1].replace("'", ''))
+                pr = str(fmt_str.split('",')[0].replace("'", ''))
+                pr = str(pr.split('",')[0].replace('"', ''))
+                pr = str(pr.split('",')[0].replace('[', ''))
+                pr = str(pr.split('",')[0].replace(']', ''))
+                if "cpuhp_latency" == event_name:
+                    pr = pr.replace("USEC ret: %d","USEC_ret:%d")
+                if "thermal_device_update" == event_name:
+                    pr = pr.replace("received event","received_event")
+                temp_a = []
+                for ii in d.split(","):
+                    ii = str(ii).replace("'","").replace(" ","")
+                    temp_a.append(ii)
+                j = 0
+                temp_a = []
+                pr_f = []
+                if "workqueue_execute" in event_name:
+                    for ki in pr.split(": "):
+                        pr_f.append(str(ki))
                 else:
-                    for ki in pr.split(" "):
-                        if len(ki) >= 1:
-                            pr_f.append(str(ki).replace(" ",""))
-            for item,item_list in offset_data.items():
-                type_str,offset,size = item_list
-                if 'unsigned char' in type_str or 'long' in type_str or 'int' in type_str or 'u32' in type_str or 'bool' in type_str or 'pid_t' in type_str:
-                    v = self.ramdump.read_u32(ftrace_raw_entry + offset)
-                    fmt_name_value_map[item] = v
-                elif 'char' in type_str or '__data_loc char' in type_str or 'const char *' in type_str or '__data_loc char[]' in type_str:
-                    if '__data_loc' in type_str:
+                    if ", " in pr and event_name != 'user_fault':
+                        for ki in pr.split(", "):
+                            if len(ki) >= 1:
+                                pr_f.append(str(ki).replace(" ",""))
+                    else:
+                        for ki in pr.split(" "):
+                            if len(ki) >= 1:
+                                pr_f.append(str(ki).replace(" ",""))
+                for item,item_list in offset_data.items():
+                    type_str,offset,size = item_list
+                    if 'unsigned char' in type_str or 'long' in type_str or 'int' in type_str or 'u32' in type_str or 'bool' in type_str or 'pid_t' in type_str:
                         v = self.ramdump.read_u32(ftrace_raw_entry + offset)
-                        v = self.ramdump.read_cstring(ftrace_raw_entry + (v & 0xffff), (v >> 16))
-                        if isinstance(v, bytes):
-                            v = self.ramdump.read_cstring(ftrace_raw_entry + (offset*4))
-                    else:
-                        v = self.ramdump.read_cstring(ftrace_raw_entry + offset)
-                    fmt_name_value_map[item] = v
-                elif 'unsigned long' in type_str or 'u64' in type_str or 'void *' in type_str:
-                    if self.ramdump.arm64:
-                        v = self.ramdump.read_u64(ftrace_raw_entry + offset)
-                    else:
-                        v = self.ramdump.read_u32(ftrace_raw_entry + offset)
-                    if "func" not in item:
-                        fmt_name_value_map[item] = hex(int(v))
-                    else:
                         fmt_name_value_map[item] = v
-                elif 'unsigned short' in type_str or 'u16' in type_str:
-                    v = self.ramdump.read_u16(ftrace_raw_entry + offset)
-                    fmt_name_value_map[item] = v
-                elif 'short' in type_str or 'signed short' in type_str or 's16' in type_str:
-                    v = self.ramdump.read_s32(ftrace_raw_entry + offset)
-                    fmt_name_value_map[item] = v
-                elif 's64' in type_str:
-                    v = self.ramdump.read_s64(ftrace_raw_entry + offset)
-                    fmt_name_value_map[item] = v
-                else:
-                    v = self.ramdump.read_u32(ftrace_raw_entry + offset)
-                    fmt_name_value_map[item] = v
-
-                if "softirq" in event_name:
-                    if v > len(softirq_action_list) -1:
-                        action = v
-                    else:
-                        action = softirq_action_list[v]
-                    fmt_name_value_map['action'] = action
-                temp_a.append(v)
-                j = j + 1
-            temp = ""
-            t1 = len(temp_a)
-            t2 = len(pr_f)
-            f = False
-            try:
-                for keyinfo in fmt_name_value_map:
-                    if "function" == keyinfo:
-                        wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
-                        tt = keyinfo + "=" + wq_function1
-                    if "func" in keyinfo:
-                        wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
-                        if wq_function1 and len(wq_function1) > 1 and wq_function1 != 'No':
-                            tt = keyinfo + "=" + wq_function1
+                    elif 'char' in type_str or '__data_loc char' in type_str or 'const char *' in type_str or '__data_loc char[]' in type_str:
+                        if '__data_loc' in type_str:
+                            v = self.ramdump.read_u32(ftrace_raw_entry + offset)
+                            v = self.ramdump.read_cstring(ftrace_raw_entry + (v & 0xffff), (v >> 16))
+                            if isinstance(v, bytes):
+                                v = self.ramdump.read_cstring(ftrace_raw_entry + (offset*4))
                         else:
-                            tt = keyinfo + "=" + str(hex(fmt_name_value_map[keyinfo]))
+                            v = self.ramdump.read_cstring(ftrace_raw_entry + offset)
+                        fmt_name_value_map[item] = v
+                    elif 'unsigned long' in type_str or 'u64' in type_str or 'void *' in type_str:
+                        if self.ramdump.arm64:
+                            v = self.ramdump.read_u64(ftrace_raw_entry + offset)
+                        else:
+                            v = self.ramdump.read_u32(ftrace_raw_entry + offset)
+                        if "func" not in item:
+                            fmt_name_value_map[item] = hex(int(v))
+                        else:
+                            fmt_name_value_map[item] = v
+                    elif 'unsigned short' in type_str or 'u16' in type_str:
+                        v = self.ramdump.read_u16(ftrace_raw_entry + offset)
+                        fmt_name_value_map[item] = v
+                    elif 'short' in type_str or 'signed short' in type_str or 's16' in type_str:
+                        v = self.ramdump.read_s32(ftrace_raw_entry + offset)
+                        fmt_name_value_map[item] = v
+                    elif 's64' in type_str:
+                        v = self.ramdump.read_s64(ftrace_raw_entry + offset)
+                        fmt_name_value_map[item] = v
                     else:
-                        tt = keyinfo + "=" + str(fmt_name_value_map[keyinfo])
-                    temp = temp + tt + "  "
-            except Exception as err:
-                print_out_str("missing event = {0} err = {1}".format(event_name,str(err)))
-                pass
-            try:
-                temp = temp + "\n"
-                temp_data = "                {4}    {0}   {1:.6f}:  {2}   {3}".format(self.cpu, round(local_timestamp / 1000000000.0, 6),event_name,temp,curr_com)
-                t = local_timestamp / 1000000000.0
-                self.ftrace_time_data[t] = temp_data
+                        v = self.ramdump.read_u32(ftrace_raw_entry + offset)
+                        fmt_name_value_map[item] = v
+
+                    if "softirq" in event_name:
+                        if v > len(softirq_action_list) -1:
+                            action = v
+                        else:
+                            action = softirq_action_list[v]
+                        fmt_name_value_map['action'] = action
+                    temp_a.append(v)
+                    j = j + 1
                 temp = ""
+                t1 = len(temp_a)
+                t2 = len(pr_f)
+                f = False
+                try:
+                    for keyinfo in fmt_name_value_map:
+                        if "function" == keyinfo:
+                            wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
+                            tt = keyinfo + "=" + wq_function1
+                        if "func" in keyinfo:
+                            wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
+                            if wq_function1 and len(wq_function1) > 1 and wq_function1 != 'No':
+                                tt = keyinfo + "=" + wq_function1
+                            else:
+                                tt = keyinfo + "=" + str(hex(fmt_name_value_map[keyinfo]))
+                        else:
+                            tt = keyinfo + "=" + str(fmt_name_value_map[keyinfo])
+                        temp = temp + tt + "  "
+                except Exception as err:
+                    print_out_str("missing event = {0} err = {1}".format(event_name,str(err)))
+                    pass
+                try:
+                    temp = temp + "\n"
+                    temp_data = "                {4}    {0}   {1:.6f}:  {2}   {3}".format(self.cpu, round(local_timestamp / 1000000000.0, 6),event_name,temp,curr_com)
+                    t = local_timestamp / 1000000000.0
+                    self.ftrace_time_data[t] = temp_data
+                    temp = ""
+                except Exception as err:
+                    print_out_str("missing event = {0} err = {1}".format(event_name,str(err)))
+                    pass
             except Exception as err:
                 print_out_str("missing event = {0} err = {1}".format(event_name,str(err)))
                 pass

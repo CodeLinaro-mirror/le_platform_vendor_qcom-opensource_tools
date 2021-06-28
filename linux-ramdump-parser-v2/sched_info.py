@@ -46,7 +46,8 @@ def cpu_isolation_mask(ramdump):
         cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
     elif (ramdump.kernel_version >= (4, 4, 0)):
         cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
-
+    if cpu_isolated_bits == None:
+        cpu_isolated_bits = 0
     return cpu_isolated_bits
 
 

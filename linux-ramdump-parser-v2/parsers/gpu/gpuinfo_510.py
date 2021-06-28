@@ -9,11 +9,14 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-from parser_util import RamParser
-from print_out import print_out_str
 import linux_list
-import traceback
 import linux_radix_tree
+import traceback
+
+from parser_util import RamParser
+from parsers.gpu.gpu_snapshot import create_snapshot_from_ramdump
+from print_out import print_out_str
+
 
 # Global Configurations
 ADRENO_DISPATCH_DRAWQUEUE_SIZE = 128
@@ -935,6 +938,7 @@ class GpuParser_510(RamParser):
         atomic_snapshot = dump.read_bool(atomic_snapshot_addr)
         if not atomic_snapshot:
             self.writeln('No atomic snapshot detected.')
+            self.create_mini_snapshot(dump)
             return
 
         atomic_snapshot_offset = dump.field_offset(
@@ -946,6 +950,7 @@ class GpuParser_510(RamParser):
 
         if atomic_snapshot_base == 0 or atomic_snapshot_size == 0:
             self.writeln('Invalid atomic snapshot.')
+            self.create_mini_snapshot(dump)
             return
 
         self.writeln('Atomic Snapshot Details:')
@@ -958,3 +963,6 @@ class GpuParser_510(RamParser):
         self.writeln('\nData dumped to atomic_snapshot.bpmd')
         file.write(data)
         file.close()
+
+    def create_mini_snapshot(self, dump):
+        create_snapshot_from_ramdump(self.devp, dump)

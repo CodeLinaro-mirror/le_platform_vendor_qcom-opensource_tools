@@ -47,7 +47,7 @@ class SdeDbgBase(Struct):
     _fields = {
             'evtlog': Struct.get_pointer,
             'reglog': Struct.get_pointer,
-            'reg_base_list': Struct.get_pointer,
+            'reg_base_list': Struct.get_address,
             'enable_reg_dump' : Struct.get_u32,
             'panic_on_err' : Struct.get_u32,
             'dbgbus_sde': Struct.get_address,
@@ -2611,16 +2611,16 @@ class MDPinfo(RamParser):
                           struct_name="struct sde_dbg_reglog",
                           fields={'enable': Struct.get_u32,
                                   'last': Struct.get_u32,
-                                  'curr': Struct.get_u32,
+                                  'curr': Struct.get_u64,
                                   'logs': Struct.get_address,
                                   'last_dump': Struct.get_u32})
                 SDE_REGLOG_ENTRY = 1024
                 self.outfile.write('%-21.5s%-11.5s%-13.7s%-13.5s%s\n' % ("TIME", "PID", "ADDRESS", "VAL", "BLK_ID"))
                 sde_reglog_start = 0
                 sde_reglog_repeat = 0
-                sde_reglog_curr = reg_log.curr % SDE_REGLOG_ENTRY
+                sde_reglog_curr = abs(reg_log.curr % SDE_REGLOG_ENTRY)
                 if (sde_reglog_curr != reg_log.last):
-                    sde_reglog_start = sde_reglog_curr
+                    sde_reglog_start = sde_reglog_curr + 1
                 else:
                     sde_reglog_repeat = 1
                 sde_reglog_count = 0
@@ -2661,38 +2661,38 @@ class MDPinfo(RamParser):
             evtlog = f_evtlog.readline()
             reglog = f_reglog.readline()
             curr_timestamp = 0
-
+            self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}\n'.format("EVTLOG_REGLOG_MERGED", "TIMESTAMP", "PID", "CPU", "DATA"))
             while (evtlog and reglog):
                 if "FUNCTION_NAME" in evtlog:
                     evtlog = f_evtlog.readline()
                 if "TIME" in reglog:
                     reglog = f_reglog.readline()
+                if "COMMIT" in evtlog:
+                    evtlog = f_evtlog.readline()
                 if not evtlog or not reglog:
                     break
 
-                evtlog_tmp = re.split(r'==>|: |\n', evtlog)
+                evtlog_tmp = re.split(r'==>|: |\n', evtlog, 2)
                 data_tmp = evtlog_tmp[2].split("[", 1)
                 reglog_tmp = re.sub(r'\s+', ' ', reglog)
                 reglog_tmp = reglog.split()
 
                 if (int(evtlog_tmp[1]) > int(reglog_tmp[0])):
                     self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}'.format("sde_reg_write", "==>"+str(reglog_tmp[0])+": "+str(int(reglog_tmp[0]) - curr_timestamp), "["+reglog_tmp[1]+"]","[N]", reglog_tmp[2] + " " + reglog_tmp[3] + " " + reglog_tmp[4]))
-                    self.outfile.write('\n')
                     reglog = f_reglog.readline()
                     curr_timestamp = int(reglog_tmp[0])
+                    self.outfile.write('\n')
                 else:
                     self.outfile.write('{:<54}{:<29}{:<200}'.format(evtlog_tmp[0], "==>"+str(evtlog_tmp[1])+": "+str(int(evtlog_tmp[1]) - curr_timestamp),"["+data_tmp[1]))
                     evtlog = f_evtlog.readline()
                     curr_timestamp = int(evtlog_tmp[1])
-                    self.outfile.write('\n')
 
             while(evtlog):
-                evtlog_tmp = re.split(r'==>|: |\n', evtlog)
+                evtlog_tmp = re.split(r'==>|: |\n', evtlog, 2)
                 data_tmp = evtlog_tmp[2].split("[", 1)
                 self.outfile.write('{:<54}{:<29}{:<200}'.format(evtlog_tmp[0], "==>"+str(evtlog_tmp[1])+": "+str(int(evtlog_tmp[1]) - curr_timestamp),"["+data_tmp[1]))
                 evtlog = f_evtlog.readline()
                 curr_timestamp = int(evtlog_tmp[1])
-                self.outfile.write('\n')
 
             while(reglog):
                 reglog_tmp = re.sub(r'\s+', ' ', reglog)
@@ -2728,13 +2728,13 @@ class MDPinfo(RamParser):
 
             self.outfile.write('=================================sde debug bus points=================================\n\n')
             self.outfile.write('{:<12}{:<12}{:<12}{:<15}'.format("wr_addr", "block_id", "test_id", "val"))
-            self.outfile.write('\n')
+            self.outfile.write('\n\n')
             while (i < dbgbus_sde_cmn.content_size):
                 j = 0
                 while (j < 16):
                     self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
                     j = j + 4
-                self.outfile.write('\n\n')
+                self.outfile.write('\n')
                 i = i + 4
 
             i = 0

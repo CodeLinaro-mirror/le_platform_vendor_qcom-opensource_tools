@@ -311,7 +311,7 @@ class FtraceParser(RamParser):
             ftrace_file_map["007"] = ftrace_core7_fd
 
             sorted_dict = {k: ftrace_time_data[k] for k in sorted(ftrace_time_data)}
-            for key in sorted_dict.keys():
+            for key in sorted(sorted_dict.keys()):
                 line = str(ftrace_time_data[key])
                 if "sched_switch:" in line:
                     cpu_number = line.split("[")[1]
