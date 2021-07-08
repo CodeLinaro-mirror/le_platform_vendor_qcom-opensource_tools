@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2018,2021 The Linux Foundation. All rights reserved.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -157,7 +157,7 @@ class Scandump_v2():
             fd = open(output, "r")
             for line in fd:
                 match_flag = False
-                matchObj = re.match('^REGISTER.SET ([xse].*[0-9]+)\s(0x[0-9a-f]{0,})', line, re.M | re.I)
+                matchObj = re.match('^REGISTER.SET ([xse].*[0-9]+)\s+(0x[0-9a-f]{0,})', line, re.M | re.I)
                 if matchObj:
                     regVal = matchObj.group(2)
                     if regVal == "0x":
@@ -165,24 +165,24 @@ class Scandump_v2():
                     self.regs[(matchObj.group(1)).lower()] = int(regVal, 16)
                     match_flag = True
                 else:
-                    matchObj = re.match('^REGISTER.SET (PC)\s(0x[0-9a-f]{0,})', line, re.M | re.I)
+                    matchObj = re.match('^REGISTER.SET (PC)\s+(0x[0-9a-f]{0,})', line, re.M | re.I)
                     if matchObj:
                         regVal = matchObj.group(2)
                         if regVal == "0x":
                             regVal = "0x0000000000000000"
                         pc_val = regVal
 
-                    matchObj_altpc = re.match('^REGISTER.SET (ALT_PC_1)\s(0x[0-9a-f]{0,})', line, re.M | re.I)
+                    matchObj_altpc = re.match('^REGISTER.SET (ALT_PC_1)\s+(0x[0-9a-f]{0,})', line, re.M | re.I)
                     if matchObj_altpc:
                         alt_pc_1 = matchObj_altpc.group(2)
                         if alt_pc_1 == "0x":
                             alt_pc_1 = "0x0000000000000000"
-                    matchObj_altpc = re.match('^REGISTER.SET (ALT_PC_2)\s(0x[0-9a-f]{0,})', line, re.M | re.I)
+                    matchObj_altpc = re.match('^REGISTER.SET (ALT_PC_2)\s+(0x[0-9a-f]{0,})', line, re.M | re.I)
                     if matchObj_altpc:
                         alt_pc_2 = matchObj_altpc.group(2)
                         if alt_pc_2 == "0x":
                             alt_pc_2 = "0x0000000000000000"
-                matchObj = re.match('^REGISTER.SET ([xse].*[0-9]+)\s([0-9a-f])', line, re.M | re.I)
+                matchObj = re.match('^REGISTER.SET ([xse].*[0-9]+)\s+([0-9a-f])', line, re.M | re.I)
                 if matchObj and match_flag == False:
                     regVal = matchObj.group(2)
                     if regVal == "0":

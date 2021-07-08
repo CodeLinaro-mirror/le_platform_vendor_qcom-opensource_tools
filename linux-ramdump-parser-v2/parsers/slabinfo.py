@@ -532,15 +532,13 @@ class Slabinfo(RamParser):
 
     def parse(self):
         if self.ramdump.minidump:
-            addr = self.ramdump.address_of('md_slabowner_dump_addr')
-            if addr is None:
-                print_out_str("NOTE: " +
-                        "slabowner Minidump is not supported")
-                return
             for eb_file in self.ramdump.ebi_files:
                 path1 = eb_file[3]
             path = os.path.join(path1.split("MD_S")[0], "md_SLABOWNER.bin")
-            input_file = open(path, 'r')
+            if not os.path.exists(path):
+                print_out_str(path + " not found")
+                return
+            input_file = open(path, 'r', errors="ignore")
             output_file = self.ramdump.open_file("slabowner_dump.txt", 'w')
             lines = input_file.readlines()
             i = 0
