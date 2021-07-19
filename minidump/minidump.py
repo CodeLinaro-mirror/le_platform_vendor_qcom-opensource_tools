@@ -103,7 +103,7 @@ class minidump():
                     allread += size
                     left -= size
                     if allread % (block_size * 20) == 0:
-                        print("%d MB ") % (allread / 1024 / 1024)
+                        print(("%d MB ") % (allread / 1024 / 1024))
                     size = block_size if left > block_size else left
                 fout.close()
 
