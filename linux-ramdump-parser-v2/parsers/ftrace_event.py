@@ -629,10 +629,10 @@ class FtraceParser_Event(object):
                 f = False
                 try:
                     for keyinfo in fmt_name_value_map:
-                        if "function" == keyinfo:
+                        if "function" == keyinfo and isinstance(fmt_name_value_map[keyinfo], int):
                             wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
                             tt = keyinfo + "=" + wq_function1
-                        if "func" in keyinfo:
+                        if "func" in keyinfo and isinstance(fmt_name_value_map[keyinfo], int):
                             wq_function1 = self.ramdump.get_symbol_info1(fmt_name_value_map[keyinfo])
                             if wq_function1 and len(wq_function1) > 1 and wq_function1 != 'No':
                                 tt = keyinfo + "=" + wq_function1

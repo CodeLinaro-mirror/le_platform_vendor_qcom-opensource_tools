@@ -15,6 +15,7 @@ import traceback
 
 from parser_util import RamParser
 from parsers.gpu.gpu_snapshot import create_snapshot_from_ramdump
+from parsers.gpu.gpu_eventlog import parse_eventlog_buffer
 from print_out import print_out_str
 
 
@@ -56,6 +57,7 @@ class GpuParser_510(RamParser):
             (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
             (self.parse_open_process_mementry, "Open Process Mementries",
              'open_process_mementries.txt'),
+            (self.parse_eventlog_data, "Eventlog Buffer", 'eventlog.txt'),
         ]
 
         self.rtw = linux_radix_tree.RadixTreeWalker(dump)
@@ -299,6 +301,9 @@ class GpuParser_510(RamParser):
         for i in range(KGSL_MAX_POOLS):
             self.writeln('\t' + str(pool_order[i]) + ' order pool size: ' +
                          str_convert_to_kb(pool_size[i]*PAGE_SIZE))
+
+    def parse_eventlog_data(self, dump):
+        parse_eventlog_buffer(self.writeln, dump)
 
     def parse_dispatcher_data(self, dump):
         dispatcher_addr = dump.struct_field_addr(self.devp,

@@ -229,15 +229,13 @@ class PageTracking(RamParser):
     def parse(self):
         ranges = None
         if self.ramdump.minidump:
-            addr = self.ramdump.address_of('md_pageowner_dump_addr')
-            if addr is None:
-                print_out_str("NOTE: " +
-                        "Pageowner Minidump is not supported")
-                return
             for eb_file in self.ramdump.ebi_files:
                 path1 = eb_file[3]
             path = os.path.join(path1.split("MD_S")[0], "md_PAGEOWNER.bin")
-            input_file = open(path, 'r')
+            if not os.path.exists(path):
+                print_out_str(path + " not found")
+                return
+            input_file = open(path, 'r', errors="ignore")
             lines = input_file.readlines()
             i = 0
             functions = defaultdict(list)

@@ -104,8 +104,9 @@ def ion_buffer_info(self, ramdump, ion_info):
     ion_info.write("{0:40} {1:4} {2:15} {3:10} {4:10} {5:10} {6:20}\n".format(
             'File_addr', 'REF', 'Name', 'Size', 'Exp', 'Heap', 'Size in KB'))
     dma_buf_info = []
-    if get_dmabuf_heap_names(self, ramdump, ion_info) is False:
-        return
+    if (ramdump.kernel_version >= (5, 10)):
+        if get_dmabuf_heap_names(self, ramdump, ion_info) is False:
+            return
 
     while (head != db_list):
         dma_buf_addr = head - list_node_offset
