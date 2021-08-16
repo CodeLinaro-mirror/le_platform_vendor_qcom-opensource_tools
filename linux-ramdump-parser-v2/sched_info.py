@@ -17,6 +17,7 @@ DEFAULT_MIGRATION_COST=500000
 DEFAULT_RT_PERIOD=1000000
 DEFAULT_RT_RUNTIME=950000
 SCHED_CAPACITY_SHIFT=10
+SCHED_CAPACITY_SCALE=1024
 
 cpu_online_bits = 0
 
@@ -175,10 +176,10 @@ class Schedinfo(RamParser):
 
         # verify nr_migrates
         sched_nr_migrate = self.ramdump.read_u32('sysctl_sched_nr_migrate')
-        if (sched_nr_migrate != DEFAULT_MIGRATION_NR):
+        if sched_nr_migrate is not None and (sched_nr_migrate != DEFAULT_MIGRATION_NR):
             print_out_str("*" * 5 + " WARNING:" + "\n")
             print_out_str("\t sysctl_sched_nr_migrate has changed!!\n")
-            print_out_str("\t If it is single digit, scheduler's load balancer has broken in the dump\n")
+            print_out_str("\t\t sysctl_sched_nr_migrate Default:{0} and Value in dump:{1}\n".format(DEFAULT_MIGRATION_NR, sched_nr_migrate))
 
         # verify migration cost
         sched_migration_cost = self.ramdump.read_u32('sysctl_sched_migration_cost')
@@ -218,3 +219,11 @@ class Schedinfo(RamParser):
             if sd == 0 or sd == None:
                 print_out_str("*" * 5 + " WARNING:" + "\n")
                 print_out_str("Online cpu:{0} has Null sched_domain!!\n".format(cpu))
+
+        # verify uclamp_util_max/min
+        sched_uclamp_util_min = self.ramdump.read_u32('sysctl_sched_uclamp_util_min')
+        sched_uclamp_util_max = self.ramdump.read_u32('sysctl_sched_uclamp_util_max')
+        if sched_uclamp_util_min is not None and ((sched_uclamp_util_min != SCHED_CAPACITY_SCALE) or (sched_uclamp_util_max != SCHED_CAPACITY_SCALE)):
+            print_out_str("*" * 5 + " WARNING:" + "\n")
+            print_out_str("\t\t sysctl_sched_uclamp_util_min Default:{0} and Value in dump:{1}\n".format(SCHED_CAPACITY_SCALE, sched_uclamp_util_min))
+            print_out_str("\t\t sysctl_sched_uclamp_util_max Default:{0} and Value in dump:{1}\n".format(SCHED_CAPACITY_SCALE, sched_uclamp_util_max))
