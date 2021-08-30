@@ -2384,18 +2384,19 @@ class MDPinfo(RamParser):
                                   'logs': Struct.get_address,
                                   'last_dump': Struct.get_u32})
 
-                SDE_EVTLOG_ENTRY = 8192
+                SDE_EVTLOG_ENTRY = int(self.ramdump.field_offset('struct sde_dbg_evtlog', 'first') / self.ramdump.sizeof('struct sde_dbg_evtlog_log'))
                 self.outfile.write('%-60.50s%-20.5s%-8.5s%-8.5s%s\n' % ("FUNC", "TIME", "PID", "CPU", "DATA"))
                 sde_evtlog_start = 0
                 sde_evtlog_repeat = 0
+                sde_evtlog_curr = abs(evt_log.curr % SDE_EVTLOG_ENTRY)
                 if (evt_log.curr != evt_log.last):
-                        sde_evtlog_start = evt_log.curr
+                        sde_evtlog_start = sde_evtlog_curr + 1
                 else:
                         sde_evtlog_repeat = 1
                 sde_evtlog_count = 0
                 while(sde_evtlog_count < SDE_EVTLOG_ENTRY):
                         i = sde_evtlog_start % SDE_EVTLOG_ENTRY
-                        if (i == evt_log.curr):
+                        if (i == sde_evtlog_curr):
                                 if (sde_evtlog_repeat):
                                         break
                                 else:
@@ -2422,7 +2423,9 @@ class MDPinfo(RamParser):
                         self.outfile.write('%-20.0d' % (log_log.time))
                         self.outfile.write('%-8.1d' % (log_log.pid))
                         self.outfile.write('%-8.1d' % (log_log.cpu))
-                        for i in range(log_log.data_cnt):
+                        SDE_EVTLOG_MAX_DATA = 15
+
+                        for i in range(min(log_log.data_cnt, SDE_EVTLOG_MAX_DATA)):
                                 self.outfile.write('%x ' % (self.ramdump.read_u32(log_log.data+(i*4))))
                         self.outfile.write('\n' % ())
                 self.outfile.close()
