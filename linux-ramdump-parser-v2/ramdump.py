@@ -895,15 +895,14 @@ class RamDump():
                 '!!! Your vmlinux is probably wrong for these dumps')
             print_out_str('!!! Exiting now')
             sys.exit(1)
-        if not self.minidump:
-            if not self.get_config():
-                print_out_str('!!! Could not get saved configuration')
-                print_out_str(
-                    '!!! This is really bad and probably indicates RAM corruption')
-                print_out_str('!!! Some features may be disabled!')
+        if not self.get_config():
+            print_out_str('!!! Could not get saved configuration')
+            print_out_str(
+                '!!! This is really bad and probably indicates RAM corruption')
+            print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
-        if not self.minidump and self.module_table.sym_paths_exist():
+        if self.module_table.sym_paths_exist():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
@@ -971,12 +970,12 @@ class RamDump():
 
         zconfig = NamedTemporaryFile(mode='wb', delete=False)
         # kconfig data starts with magic 8 byte string, go past that
-        s = self.read_cstring(kconfig_addr, 8)
+        s = self.read_cstring(kconfig_addr, 8, allow_elf=True)
         if s != 'IKCFG_ST':
             return
         kconfig_addr = kconfig_addr + 8
         for i in range(0, kconfig_size):
-            val = self.read_byte(kconfig_addr + i)
+            val = self.read_byte(kconfig_addr + i, allow_elf=True)
             zconfig.write(struct.pack('<B', val))
 
         zconfig.close()
@@ -1426,6 +1425,13 @@ class RamDump():
                     self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
                     print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
 
+    def get_page_size(self):
+        if self.is_config_defined('CONFIG_ARM64_PAGE_SHIFT'):
+            PAGE_SHIFT = int(self.get_config_val('CONFIG_ARM64_PAGE_SHIFT'))
+        else:
+            PAGE_SHIFT = 12
+        return 1 << PAGE_SHIFT
+
     def get_hw_id(self, add_offset=True):
         socinfo_format = -1
         socinfo_id = -1
@@ -1656,6 +1662,20 @@ class RamDump():
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
+    def retrieve_minidump_modules(self):
+        kmodules_seg = next((s for s in self.elffile.iter_sections() if s.name == 'KMODULES'), None)
+        if kmodules_seg is None:
+            return
+
+        kmodules_lines = self.read_cstring(kmodules_seg['sh_addr'], max_length=kmodules_seg['sh_size'])
+        for line in kmodules_lines.splitlines():
+            m = re.fullmatch(r"^name: (.+), base: (?:0x)?([0-9a-fA-F]+)\b.*", line)
+            if m is not None:
+                mod_tbl_ent = module_table.module_table_entry()
+                mod_tbl_ent.name = m.group(1)
+                mod_tbl_ent.module_offset = int(m.group(2), base=16)
+                self.module_table.add_entry(mod_tbl_ent)
+
     def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
         name_index = [s for s in ko_file_list.keys() if mod_tbl_ent.name in s]
         if len(name_index) == 0:
@@ -1668,6 +1688,56 @@ class RamDump():
             ko_file_list[mod_tbl_ent.name] = temp_data
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
+
+        try:
+            mod = import_module('elftools.elf.elffile')
+            ELFFile = mod.ELFFile
+            mod = import_module('elftools.elf.constants')
+            SHF = mod.SH_FLAGS
+            ARCH_SHF_SMALL = 0  # 0 for arm and arm64
+            SHF_RO_AFTER_INIT = 0x00200000  # custom for Linux
+            with open(mod_tbl_ent.get_sym_path(), 'rb') as fd:
+                elf = ELFFile(fd)
+                # This logic mirrors kernel/module.c:layout_sections and layout_and_allocate
+                # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2425
+                masks = [
+                    (SHF.SHF_EXECINSTR | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
+                    (SHF.SHF_ALLOC, SHF.SHF_WRITE | ARCH_SHF_SMALL),
+                    (SHF_RO_AFTER_INIT | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
+                    (SHF.SHF_WRITE | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
+                    (ARCH_SHF_SMALL | SHF.SHF_ALLOC, 0)
+                ]
+                size = 0
+                mod_tbl_ent.section_offsets = {}
+                for mask in masks:
+                    for s in elf.iter_sections():
+                        sh_flags = s['sh_flags']
+                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n3524
+                        if s.name == '.data..ro_after_init':
+                            sh_flags |= SHF_RO_AFTER_INIT
+                        if s.name == '__jump_table':
+                            sh_flags |= SHF_RO_AFTER_INIT
+                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2442
+                        if (sh_flags & mask[0]) != mask[0] \
+                            or (sh_flags & mask[1]) \
+                            or s.name in mod_tbl_ent.section_offsets.keys() \
+                            or s.name.startswith('.init') or s.name.startswith('.ARM.extab.init') or s.name.startswith('.ARM.exidx.init'):
+                            continue
+                        # this is internals of get_offset -- arch_mod_section_prepend not defined for arm or arm64 so far
+                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2397
+                        if s['sh_addralign']:
+                            size = (size + s['sh_addralign'] - 1) & ~(s['sh_addralign'] - 1)
+
+                        if s.name:
+                            # Add to section_offsets table!
+                            mod_tbl_ent.section_offsets[s.name] = size + mod_tbl_ent.module_offset
+                        size += s['sh_size']
+                    # This is the internals of debug_align
+                    # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2456
+                    if self.is_config_defined('CONFIG_ARCH_HAS_STRICT_MODULE_RWX'):
+                        size = (size + (self.get_page_size() - 1)) & ~(self.get_page_size() - 1)
+        except ImportError:
+            pass
 
         args = [self.nm_path, '-n', mod_tbl_ent.get_sym_path()]
         p = subprocess.run(args, stdout=subprocess.PIPE)
@@ -1780,7 +1850,10 @@ class RamDump():
         self.lookup_table.sort()
 
     def setup_module_symbols(self):
-        self.retrieve_modules()
+        if self.minidump:
+            self.retrieve_minidump_modules()
+        else:
+            self.retrieve_modules()
         self.parse_module_symbols();
         self.add_symbols_to_global_lookup_table()
 
@@ -1820,26 +1893,8 @@ class RamDump():
         >>> hex(dump.address_of('linux_banner'))
         '0xffffffc000c7a0a8L'
         """
-        flag = False
-        sym_name = symbol
         try:
-            addr = self.gdbmi.address_of(symbol)
-            if ((addr & 0xFF000000000000) == 0) and self.arm64:
-                for mod_tbl_ent in self.lookup_table:
-                    if "." in symbol:
-                        sym_name = symbol.split(".")[0]
-                        var = ".".join(symbol.split(".")[1:])
-                        sym_type = self.type_of(sym_name)
-                        var_offset = self.field_offset(sym_type, var)
-                        flag = True
-                    if sym_name in str(mod_tbl_ent) and sym_name == mod_tbl_ent[2]:
-                        addr = mod_tbl_ent[0]
-                if flag:
-                    return addr + var_offset
-                else:
-                    return addr
-            else:
-                return addr
+            return self.gdbmi.address_of(symbol)
         except gdbmi.GdbMIException:
             if self.hyp:
                 try:
@@ -2060,82 +2115,82 @@ class RamDump():
             a = ebi[0].read(length)
             return a
 
-    def read_dword(self, addr_or_name, virtual=True, cpu=None):
-        s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+    def read_dword(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
+        s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_word(self, addr_or_name, virtual=True, cpu=None):
+    def read_word(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a word size (pointer) read from ramdump"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+            s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_halfword(self, addr_or_name, virtual=True, cpu=None):
+    def read_halfword(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value corresponding to half the word size"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+            s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<H', virtual, cpu)
+            s = self.read_string(addr_or_name, '<H', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_slong(self, addr_or_name, virtual=True, cpu=None):
+    def read_slong(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value corresponding to half the word size"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<q', virtual, cpu)
+            s = self.read_string(addr_or_name, '<q', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<i', virtual, cpu)
+            s = self.read_string(addr_or_name, '<i', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_ulong(self, addr_or_name, virtual=True, cpu=None):
+    def read_ulong(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value corresponding to half the word size"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+            s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_byte(self, addr_or_name, virtual=True, cpu=None):
+    def read_byte(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """Reads a single byte."""
-        s = self.read_string(addr_or_name, '<B', virtual, cpu)
+        s = self.read_string(addr_or_name, '<B', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_bool(self, addr_or_name, virtual=True, cpu=None):
+    def read_bool(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """Reads a bool."""
-        s = self.read_string(addr_or_name, '<?', virtual, cpu)
+        s = self.read_string(addr_or_name, '<?', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_s64(self, addr_or_name, virtual=True, cpu=None):
+    def read_s64(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 64 bits"""
-        s = self.read_string(addr_or_name, '<q', virtual, cpu)
+        s = self.read_string(addr_or_name, '<q', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_u64(self, addr_or_name, virtual=True, cpu=None):
+    def read_u64(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 64 bits"""
-        s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+        s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_s32(self, addr_or_name, virtual=True, cpu=None):
+    def read_s32(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 32 bits"""
-        s = self.read_string(addr_or_name, '<i', virtual, cpu)
+        s = self.read_string(addr_or_name, '<i', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_u32(self, addr_or_name, virtual=True, cpu=None):
+    def read_u32(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 32 bits"""
-        s = self.read_string(addr_or_name, '<I', virtual, cpu)
+        s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_int(self, addr_or_name, virtual=True,  cpu=None):
+    def read_int(self, addr_or_name, virtual=True,  cpu=None, allow_elf=False):
         """Alias for :func:`~read_u32`"""
-        return self.read_u32(addr_or_name, virtual, cpu)
+        return self.read_u32(addr_or_name, virtual, cpu, allow_elf)
 
-    def read_u16(self, addr_or_name, virtual=True, cpu=None):
+    def read_u16(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 16 bits"""
-        s = self.read_string(addr_or_name, '<H', virtual, cpu)
+        s = self.read_string(addr_or_name, '<H', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_pointer(self, addr_or_name, virtual=True, cpu=None):
+    def read_pointer(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """Reads ``addr_or_name`` as a pointer variable.
 
         The read length is either 32-bit or 64-bit depending on the
@@ -2200,35 +2255,43 @@ class RamDump():
         return self.read_cstring(self.read_pointer(cstring_addr), max_length)
 
     def read_cstring(self, addr_or_name, max_length=100, virtual=True,
-                     cpu=None):
+                     cpu=None, allow_elf=False):
         """Reads a C string."""
         addr = addr_or_name
+        s = None
         if virtual:
             if cpu is not None:
                 pcpu_offset = self.per_cpu_offset(cpu)
                 addr_or_name = self.resolve_virt(addr_or_name)
                 addr_or_name += pcpu_offset + self.per_cpu_offset(cpu)
             addr = self.virt_to_phys(addr_or_name)
-        s = self.read_physical(addr, max_length)
+            if allow_elf and addr is None:
+                s = self.gdbmi.read_memory(addr_or_name, '{}+{}'.format(addr_or_name, max_length))
+        if not s:
+            s = self.read_physical(addr, max_length)
         if s is not None:
             a = s.decode('ascii', 'ignore')
             return a.split('\0')[0]
         else:
             return s
 
-    def read_binarystring(self, addr_or_name, length, virtual=True, cpu=None):
+    def read_binarystring(self, addr_or_name, length, virtual=True, cpu=None, allow_elf=False):
         """Reads binary data of specified length from addr_or_name."""
         addr = addr_or_name
+        s = None
         if virtual:
             if cpu is not None:
                 pcpu_offset = self.per_cpu_offset(cpu)
                 addr_or_name = self.resolve_virt(addr_or_name)
                 addr_or_name += pcpu_offset
             addr = self.virt_to_phys(addr_or_name)
-        s = self.read_physical(addr, length)
+            if allow_elf and addr is None:
+                s = self.gdbmi.read_memory(addr_or_name, '{}+{}'.format(addr_or_name, length))
+        if not s:
+            s = self.read_physical(addr, length)
         return s
 
-    def read_string(self, addr_or_name, format_string, virtual=True, cpu=None):
+    def read_string(self, addr_or_name, format_string, virtual=True, cpu=None, allow_elf=False):
         """Reads data using a format string.
 
         Reads data from addr_or_name using format_string (which should be a
@@ -2238,6 +2301,7 @@ class RamDump():
         """
         addr = addr_or_name
         per_cpu_string = ''
+        s = None
         if virtual:
             if cpu is not None:
                 pcpu_offset = self.per_cpu_offset(cpu)
@@ -2245,7 +2309,10 @@ class RamDump():
                 addr_or_name += pcpu_offset
                 per_cpu_string = ' with per-cpu offset of ' + hex(pcpu_offset)
             addr = self.virt_to_phys(addr_or_name)
-        s = self.read_physical(addr, struct.calcsize(format_string))
+            if allow_elf and addr is None:
+                s = self.gdbmi.read_memory(addr_or_name, '{}+{}'.format(addr_or_name, struct.calcsize(format_string)))
+        if not s:
+            s = self.read_physical(addr, struct.calcsize(format_string))
         if (s is None) or (s == ''):
             return None
         return struct.unpack(format_string, s)
