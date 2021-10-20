@@ -147,8 +147,8 @@ class RTB(RamParser):
         line = self.get_caller(caller)
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
-        rtbout.write('[{0}] [{1}] : {2} interrupt 0x{3:x} handled from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line))
+        rtbout.write('[{0}] [{1}] : {2} interrupt 0x{3:x} {4} handled from addr {5:x} {6} {7}\n'.format(
+            timestamp, cycle_count, logtype, data, data, caller, func, line))
 
     def next_rtb_entry(self, index, step_size, mask):
         unused_buffer_size = (mask + 1) % step_size
@@ -163,6 +163,11 @@ class RTB(RamParser):
             rtb = self.ramdump.address_of('msm_rtb')
         else:
             rtb = self.ramdump.read_pointer(rtb_ptr)
+        if rtb is None and self.ramdump.minidump:
+            rtb_seg = next((s for s in self.ramdump.elffile.iter_sections() if s.name == 'KRTB_BUF'), None)
+            if rtb_seg is not None:
+                rtb = rtb_seg['sh_addr']
+                rtb_ptr = True # Not a pointer, but used below to determine whether new RTB layout is used
         if rtb is None:
             print_out_str(
                 '[!] RTB was not enabled in this build. No RTB files will be generated')

@@ -128,6 +128,16 @@ def verify_active_cpus(ramdump):
                         mask_bitset_pos(cluster_online_cpus),
                         mask_bitset_pos(cluster_isolated_cpus), crctl_nr_isol))
 
+def dump_rq_lock_information(ramdump):
+    runqueues_addr = ramdump.address_of('runqueues')
+    lock_owner_cpu_offset = ramdump.field_offset('struct rq', 'lock.owner_cpu')
+    if lock_owner_cpu_offset:
+        for i in ramdump.iter_cpus():
+            rq_addr = runqueues_addr + ramdump.per_cpu_offset(i)
+            lock_owner_cpu = ramdump.read_int(rq_addr + lock_owner_cpu_offset)
+            print_out_str("\n cpu {0} ->rq_lock owner cpu {1}".format(i,hex(lock_owner_cpu)))
+        print_out_str("\n ")
+
 def dump_cpufreq_data(ramdump):
     cpufreq_data_addr = ramdump.address_of('cpufreq_cpu_data')
     cpuinfo_off = ramdump.field_offset('struct cpufreq_policy', 'cpuinfo')
@@ -227,3 +237,4 @@ class Schedinfo(RamParser):
             print_out_str("*" * 5 + " WARNING:" + "\n")
             print_out_str("\t\t sysctl_sched_uclamp_util_min Default:{0} and Value in dump:{1}\n".format(SCHED_CAPACITY_SCALE, sched_uclamp_util_min))
             print_out_str("\t\t sysctl_sched_uclamp_util_max Default:{0} and Value in dump:{1}\n".format(SCHED_CAPACITY_SCALE, sched_uclamp_util_max))
+        dump_rq_lock_information(self.ramdump)

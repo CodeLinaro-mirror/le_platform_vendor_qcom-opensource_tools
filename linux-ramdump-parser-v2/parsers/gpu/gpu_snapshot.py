@@ -98,10 +98,10 @@ class kgsl_snapshot_gmu_mem(Structure):
 
 def gmu_log(devp, dump, chipid):
     if chipid >= 0x7000000:
-        gmu_dev = dump.sibling_field_addr(devp, 'struct genc_device',
+        gmu_dev = dump.sibling_field_addr(devp, 'struct gen7_device',
                                           'adreno_dev', 'gmu')
         gmu_logs = dump.read_structure_field(gmu_dev,
-                                             'struct genc_gmu_device',
+                                             'struct gen7_gmu_device',
                                              'gmu_log')
     else:
         gmu_dev = dump.sibling_field_addr(devp, 'struct a6xx_device',
@@ -135,11 +135,11 @@ def gmu_log(devp, dump, chipid):
 
 def hfi_mem(devp, dump, chipid):
     if chipid >= 0x7000000:
-        gmu_dev = dump.sibling_field_addr(devp, 'struct genc_device',
+        gmu_dev = dump.sibling_field_addr(devp, 'struct gen7_device',
                                           'adreno_dev', 'gmu')
-        hfi = dump.struct_field_addr(gmu_dev, 'struct genc_gmu_device',
+        hfi = dump.struct_field_addr(gmu_dev, 'struct gen7_gmu_device',
                                      'hfi')
-        hfi_mem = dump.read_structure_field(hfi, 'struct genc_hfi',
+        hfi_mem = dump.read_structure_field(hfi, 'struct gen7_hfi',
                                             'hfi_mem')
     else:
         gmu_dev = dump.sibling_field_addr(devp, 'struct a6xx_device',
@@ -275,15 +275,12 @@ def snapshot_rb_section(devp, dump, file, rb_type):
 def create_snapshot_from_ramdump(devp, dump):
     # GPU revision
     gpucore = dump.read_structure_field(devp,
-                                        'struct adreno_device',
-                                        'gpucore')
+                                        'struct adreno_device', 'gpucore')
     gpurev = dump.read_structure_field(gpucore,
                                        'struct adreno_gpu_core', 'gpurev')
 
     # Gpu chip id
-    chipid = dump.read_structure_field(devp,
-                                       'struct adreno_device',
-                                       'chipid')
+    chipid = dump.read_structure_field(devp, 'struct adreno_device', 'chipid')
 
     file_name = 'mini_snapshot.bpmd'
     file = dump.open_file('gpu_parser/' + file_name, 'wb')
@@ -299,9 +296,15 @@ def create_snapshot_from_ramdump(devp, dump):
     snapshot_rb_section(devp, dump, file, 'cur_rb')
     snapshot_rb_section(devp, dump, file, 'prev_rb')
 
-    # Dump GMU info
-    snapshot_gmu_mem_section(devp, dump, chipid, file, SNAPSHOT_GMU_MEM_HFI)
-    snapshot_gmu_mem_section(devp, dump, chipid, file, SNAPSHOT_GMU_MEM_LOG)
+    # Check & dump GMU info
+    gmu_core = dump.struct_field_addr(devp, 'struct kgsl_device', 'gmu_core')
+    gmu_on = dump.read_structure_field(gmu_core,
+                                       'struct gmu_core_device', 'flags')
+    if ((gmu_on >> 4) & 1):
+        snapshot_gmu_mem_section(devp,
+                                 dump, chipid, file, SNAPSHOT_GMU_MEM_HFI)
+        snapshot_gmu_mem_section(devp,
+                                 dump, chipid, file, SNAPSHOT_GMU_MEM_LOG)
 
     # Dump last section
     last_section = kgsl_snapshot_section_header()

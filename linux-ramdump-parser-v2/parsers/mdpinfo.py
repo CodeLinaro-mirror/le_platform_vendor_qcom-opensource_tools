@@ -52,6 +52,10 @@ class SdeDbgBase(Struct):
             'panic_on_err' : Struct.get_u32,
             'dbgbus_sde': Struct.get_address,
             'dbgbus_vbif_rt': Struct.get_address,
+            'dbgbus_dsi': Struct.get_address,
+            'dbgbus_rsc': Struct.get_address,
+            'dbgbus_lutdma': Struct.get_address,
+            'dbgbus_dp': Struct.get_address,
         }
 
 class RangeDumpFbNode(Struct):
@@ -2726,26 +2730,102 @@ class MDPinfo(RamParser):
                             fields={'dumped_content': Struct.get_pointer,
                                     'content_size': Struct.get_u32})
 
-            self.outfile = self.ramdump.open_file('sde_dbgbus.txt', 'w')
-            i = 0
+            dbgbus_dsi = Struct(self.ramdump, mdss_dbg.dbgbus_dsi,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_dsi_cmn = Struct(self.ramdump, dbgbus_dsi.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
 
-            self.outfile.write('=================================sde debug bus points=================================\n\n')
-            self.outfile.write('{:<12}{:<12}{:<12}{:<15}'.format("wr_addr", "block_id", "test_id", "val"))
-            self.outfile.write('\n\n')
+            dbgbus_rsc = Struct(self.ramdump, mdss_dbg.dbgbus_rsc,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_rsc_cmn = Struct(self.ramdump, dbgbus_rsc.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            dbgbus_lutdma = Struct(self.ramdump, mdss_dbg.dbgbus_lutdma,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_lutdma_cmn = Struct(self.ramdump, dbgbus_lutdma.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            dbgbus_dp = Struct(self.ramdump, mdss_dbg.dbgbus_dp,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_dp_cmn = Struct(self.ramdump, dbgbus_dp.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            self.outfile = self.ramdump.open_file('sde_dbgbus.txt', 'w')
+
+            i = 0
+            self.outfile.write('---------------------------------\n[dbgbus_sde]\n---------------------------------\n')
             while (i < dbgbus_sde_cmn.content_size):
                 j = 0
+                self.outfile.write("0x%-.8x| " % (i))
                 while (j < 16):
-                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
                     j = j + 4
                 self.outfile.write('\n')
                 i = i + 4
 
             i = 0
-            self.outfile.write('\n\n=================================vbif debug bus points=================================\n\n')
+            self.outfile.write('\n---------------------------------\n[dbgbus_vbif_rt]\n---------------------------------\n')
             while (i < dbgbus_vbif_cmn.content_size):
                 j = 0
+                self.outfile.write("0x%-.8x| " % (i))
                 while (j < 16):
-                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_vbif_cmn.dumped_content + (i*4) + j)))
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_vbif_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_dsi]\n---------------------------------\n')
+            while (i < dbgbus_dsi_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_dsi_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_rsc]\n---------------------------------\n')
+            while (i < dbgbus_rsc_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_rsc_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_lutdma]\n---------------------------------\n')
+            while (i < dbgbus_lutdma_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_lutdma_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_dp]\n---------------------------------\n')
+            while (i < dbgbus_dp_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_dp_cmn.dumped_content + (i*4) + j)))
                     j = j + 4
                 self.outfile.write('\n')
                 i = i + 4
