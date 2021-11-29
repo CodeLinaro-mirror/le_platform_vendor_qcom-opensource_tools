@@ -921,6 +921,19 @@ class GpuParser_510(RamParser):
             self.writeln('log_stream_enable: ' + str(log_stream_enable))
         self.writeln('cm3_fault: ' + str(cm3_fault))
 
+        domain = dump.read_structure_field(gmu_dev_addr, gmu_device, 'domain')
+        arm_smmu = dump.container_of(domain,
+                                     'struct arm_smmu_domain', 'domain')
+        pgtbl_ops = dump.read_structure_field(arm_smmu,
+                                              'struct arm_smmu_domain',
+                                              'pgtbl_ops')
+        pgtbl_cfg = dump.sibling_field_addr(pgtbl_ops,
+                                            'struct io_pgtable', 'ops', 'cfg')
+        ttbr0_val = dump.read_structure_field(pgtbl_cfg,
+                                              'struct io_pgtable_cfg',
+                                              'arm_lpae_s1_cfg.ttbr')
+        self.writeln('ttbr0: ' + strhex(ttbr0_val))
+
         num_clks = dump.read_structure_field(gmu_dev_addr, gmu_device,
                                              'num_clks')
         clks = dump.read_structure_field(gmu_dev_addr, gmu_device, 'clks')
