@@ -228,7 +228,7 @@ class FtraceParser(RamParser):
                               "#              | |       |   ||||       |         |\n"
                 ftrace_out.write(header_data)
             else:
-                ftrace_out = self.ramdump.open_file('ftrace_' + trace_name + '.txt','w')
+                ftrace_out = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '.txt','w')
 
             ftrace_time_data = {}
             nr_total_buffer_pages = 0
@@ -291,23 +291,23 @@ class FtraceParser(RamParser):
             switch_map = {}
             ftrace_file_map = {}
             if trace_name is None or trace_name == 0x0 or trace_name == "0x0" or trace_name == "None" or trace_name == "null" or len(trace_name) < 1:
-                ftrace_core0_fd = self.ramdump.open_file('ftrace_core0.txt','w')
-                ftrace_core1_fd = self.ramdump.open_file('ftrace_core1.txt','w')
-                ftrace_core2_fd = self.ramdump.open_file('ftrace_core2.txt','w')
-                ftrace_core3_fd = self.ramdump.open_file('ftrace_core3.txt','w')
-                ftrace_core4_fd = self.ramdump.open_file('ftrace_core4.txt','w')
-                ftrace_core5_fd = self.ramdump.open_file('ftrace_core5.txt','w')
-                ftrace_core6_fd = self.ramdump.open_file('ftrace_core6.txt','w')
-                ftrace_core7_fd = self.ramdump.open_file('ftrace_core7.txt','w')
+                ftrace_core0_fd = self.ramdump.open_file('ftrace_core0.txt', 'w')
+                ftrace_core1_fd = self.ramdump.open_file('ftrace_core1.txt', 'w')
+                ftrace_core2_fd = self.ramdump.open_file('ftrace_core2.txt', 'w')
+                ftrace_core3_fd = self.ramdump.open_file('ftrace_core3.txt', 'w')
+                ftrace_core4_fd = self.ramdump.open_file('ftrace_core4.txt', 'w')
+                ftrace_core5_fd = self.ramdump.open_file('ftrace_core5.txt', 'w')
+                ftrace_core6_fd = self.ramdump.open_file('ftrace_core6.txt', 'w')
+                ftrace_core7_fd = self.ramdump.open_file('ftrace_core7.txt', 'w')
             else:
-                ftrace_core0_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core0.txt','w')
-                ftrace_core1_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core1.txt','w')
-                ftrace_core2_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core2.txt','w')
-                ftrace_core3_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core3.txt','w')
-                ftrace_core4_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core4.txt','w')
-                ftrace_core5_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core5.txt','w')
-                ftrace_core6_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core6.txt','w')
-                ftrace_core7_fd = self.ramdump.open_file('ftrace_' + trace_name + '_core7.txt','w')
+                ftrace_core0_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core0.txt','w')
+                ftrace_core1_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core1.txt','w')
+                ftrace_core2_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core2.txt','w')
+                ftrace_core3_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core3.txt','w')
+                ftrace_core4_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core4.txt','w')
+                ftrace_core5_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core5.txt','w')
+                ftrace_core6_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core6.txt','w')
+                ftrace_core7_fd = self.ramdump.open_file('ftrace_parser/' + 'ftrace_' + trace_name + '_core7.txt','w')
 
             ftrace_file_map["000"] = ftrace_core0_fd
             ftrace_file_map["001"] = ftrace_core1_fd
