@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -72,6 +72,12 @@ class Logcat_base(RamParser):
             self.addr_length    = 8
         else:
             self.addr_length    = 4
+        self.extra_offset = 0
+        sys_tz_addr = self.ramdump.address_of('sys_tz')
+        tz_minuteswest_offset = self.ramdump.field_offset(
+                    'struct timezone ', 'tz_minuteswest')
+        self.tz_minuteswest = self.ramdump.read_s32(sys_tz_addr + tz_minuteswest_offset)
+        print_out_str("struct timezone --> tz_minuteswest= "+str(self.tz_minuteswest)+"min")
 
     def read_bytes(self, addr, len):
         addr = self.mmu.virt_to_phys(addr)
@@ -115,6 +121,7 @@ class Logcat_base(RamParser):
     def format_time(self, tv_sec, tv_nsec):
         tv_nsec = str(tv_nsec // 1000000)
         tv_nsec = str(tv_nsec).zfill(3)
+        tv_sec -= 60 * self.tz_minuteswest
         date = datetime.datetime.utcfromtimestamp(tv_sec)
         timestamp = date.strftime("%m-%d %H:%M:%S") + '.' + tv_nsec
         return timestamp
@@ -165,7 +172,7 @@ class Logcat_base(RamParser):
             msg = tmpmsg.decode('ascii', 'ignore').strip()
         return evt_type, msg, length
 
-    def process_log_and_save(self, _data, log_id, section):
+    def process_log_and_save(self, _data):
         ret=""
         pos = 0
         while pos < len(_data):
@@ -173,7 +180,7 @@ class Logcat_base(RamParser):
                 break
             # first [0-30] total 31 bytes
             logEntry = struct.unpack('<IIIQIIHB', _data[pos:pos+self.SIZEOF_LOG_ENTRY+1])
-            pos = pos+self.SIZEOF_LOG_ENTRY+1
+            pos = pos+self.SIZEOF_LOG_ENTRY + 1 + self.extra_offset
             uid = logEntry[0]
             pid = logEntry[1]
             tid = logEntry[2]
@@ -189,13 +196,19 @@ class Logcat_base(RamParser):
             pos = pos+msg_len-1
             timestamp = self.format_time(tv_sec, tv_nsec)
             if len(msgList) >= 2 :
-                fmt_msg = "%s %5d %5d %5d %c %-8.*s: %s\n" % (
+                multilines = msgList[1].split("\n")
+                preifx_line = "%s %5d %5d %5d %c %-8.*s: " % (
                     timestamp, uid, pid, tid, self.filter_pri_to_char(priority), len(msgList[0]),
-                    cleanupString(msgList[0].strip()),cleanupString(msgList[1].strip()))
-                ret += fmt_msg
+                    cleanupString(msgList[0].strip()))
+                if len(multilines) > 1:
+                    for line in multilines:
+                        if(len(cleanupString(line.strip())) > 0):
+                            ret += preifx_line + "%s\n" % cleanupString(line)
+                else:
+                    ret += preifx_line + "%s\n" % cleanupString(msgList[1].strip())
         return ret
 
-    def process_binary_log_and_save(self, _data, log_id=0, section =0):
+    def process_binary_log_and_save(self, _data):
         ret=""
         pos = 0
         while pos < len(_data):
@@ -203,7 +216,7 @@ class Logcat_base(RamParser):
                 break
             # first [0-30] total 31 bytes
             logEntry = struct.unpack('<IIIQIIH', _data[pos : pos + self.SIZEOF_LOG_ENTRY])
-            pos = pos + self.SIZEOF_LOG_ENTRY
+            pos = pos + self.SIZEOF_LOG_ENTRY + self.extra_offset
             uid = logEntry[0]
             pid = logEntry[1]
             tid = logEntry[2]
@@ -256,9 +269,9 @@ class Logcat_base(RamParser):
         ret = None
         if _data:
             if is_binary:
-                ret = self.process_binary_log_and_save(_data, log_id, section)
+                ret = self.process_binary_log_and_save(_data)
             else:
-                ret = self.process_log_and_save(_data, log_id, section)
+                ret = self.process_log_and_save(_data)
 
         return log_id, section, ret
 
@@ -398,6 +411,11 @@ class Logcat_vma(Logcat_base):
         self.bin_file = bin_file
         self.HEAD_SIZE = 32
         self.vmas = []
+        if int(ramdump.get_config_val("CONFIG_BASE_SMALL")) == 0:
+            self.PID_MAX = 0x8000
+        else:
+            self.PID_MAX = 0x1000
+        print_out_str("max pid = " + str(self.PID_MAX))
 
     def read_bytes(self, addr, len):
         addr = addr & 0x0000ffffffffffff
@@ -459,6 +477,51 @@ class Logcat_vma(Logcat_base):
                 self.vmas.append(vma)
                 pos = pos + self.HEAD_SIZE + vma_size
 
+    def has_valid_log(self, main_chunklist_addr):
+        end_node_addr = self.read_bytes(main_chunklist_addr, self.addr_length)
+        current_node = end_node_addr + self.addr_length * 2 #-->SerializedLogChunk
+        _data_addr = self.read_bytes(current_node, self.addr_length)
+        _data_size = self.read_bytes(current_node + self.addr_length, self.addr_length)
+        if _data_size <= self.SIZEOF_LOG_ENTRY:
+            return False
+
+        valid = self.has_valid_LogEntrys(_data_addr, _data_size, 10)
+        if valid is False: ## retry
+            extra_log_entry_offset = 4
+            valid = self.has_valid_LogEntrys(_data_addr, _data_size, 10, extra_log_entry_offset)
+            if valid:
+                self.extra_offset = extra_log_entry_offset
+        return valid
+
+    def has_valid_LogEntrys(self, _addr, _data_size, valid_count, extra_offset=0):
+        i = 0
+        valid = False
+        offset = 0
+        while i < valid_count:
+            valid, length = self.is_valid_LogEntry(_addr+offset)
+            if not valid:
+                return False
+            offset = offset + length + extra_offset
+            if offset > _data_size:
+                return True
+            i = i + 1
+        return True
+
+    def is_valid_LogEntry(self, _addr):
+        uid = self.read_bytes(_addr, 4)
+        pid = self.read_bytes(_addr + 0x4, 4)
+        tid = self.read_bytes(_addr + 0x8, 4)
+        sequence = self.read_bytes(_addr + 0xc, 8)
+        tv_sec = self.read_bytes(_addr + 0x14, 4)
+        tv_nsec = self.read_bytes(_addr + 0x18, 4)
+        msg_len = self.read_bytes(_addr + 0x1c, 2)
+        priority = self.read_bytes(_addr + self.SIZEOF_LOG_ENTRY, 1)
+        if pid <= self.PID_MAX and uid <= self.PID_MAX and priority \
+            <= self.ANDROID_LOG_SILENT and priority >= self.ANDROID_LOG_VERBOSE:
+            if  msg_len >=1 and  msg_len <= 4068: #max_payload
+                return True, 30 + msg_len
+        return False, 0
+
     def parse(self):
         startTime = datetime.datetime.now()
         self.get_all_vmas()
@@ -472,8 +535,14 @@ class Logcat_vma(Logcat_base):
         if chunklist_addr == 0:
             return False
         # start parsing
-        print_out_str("logbuf_addr = 0x%x" %(chunklist_addr-0x60))
+        is_valid_chunklist = self.has_valid_log(chunklist_addr + self.LOG_ID_MAIN * 0x18)
+        if not is_valid_chunklist:
+            print_out_str("There is no valid log in logbuf_addr = 0x%x" %(chunklist_addr-0x60))
+            return False
+        # start parsing
+        print("LogBuffer address",hex(chunklist_addr-0x60))
         self.process_chunklist_and_save(chunklist_addr)
+        print_out_str("logbuf_addr = 0x%x" %(chunklist_addr-0x60))
         print("logcat_vma parse logcat cost "+str((datetime.datetime.now()-startTime).total_seconds())+" s")
         return self.is_success
 
