@@ -1149,11 +1149,11 @@ class RamDump():
             socinfo = self.read_pointer(socinfo)
             if socinfo is None:
                 return None
-            ver = self.read_structure_field(socinfo, 'struct socinfo', 'ver')
+            ver = int(self.read_structure_field(socinfo, 'struct socinfo', 'ver') or 0)
             chip_ver_major = (ver & 0xFFFF0000) >> 16
             chip_ver_minor = (ver & 0x0000FFFF)
             print_out_str("Chip Version: v{0}.{1}".format(chip_ver_major, chip_ver_minor))
-            serial_num = self.read_structure_field(socinfo, 'struct socinfo', 'serial_num')
+            serial_num = int(self.read_structure_field(socinfo, 'struct socinfo', 'serial_num') or 0)
             print_out_str("Chip Serial Number 0x{0:x}".format(serial_num))
             return True
 
