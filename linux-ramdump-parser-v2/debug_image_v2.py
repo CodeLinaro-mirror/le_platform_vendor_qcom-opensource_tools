@@ -224,15 +224,8 @@ class DebugImage_v2():
             print_out_str('Could not find cpuss_parser_path . Please define cpuss_parser_path in local_settings')
             return
         offset = None
-        if not ram_dump.minidump:
-            ebi_files = ram_dump.ebi_files
-        else:
-            ebi_files = ram_dump.ebi_files_minidump
-        for eb_file in ebi_files:
-            if start >= eb_file[1] and start <= eb_file[2]:
-                input = eb_file[3]
-                offset = start - eb_file[1]
-                break
+        offset, input = ram_dump.get_read_physical_offset(start)
+
         if offset is None:
             print_out_str("parse_cpuss start address {0} not found".format(start))
         print_out_str("parse_cpuss offset address = {0} input = {1} cpuss_parser_json = {2}".format(hex(int(offset)),input,cpuss_parser_json))
@@ -802,7 +795,8 @@ class DebugImage_v2():
                 imem_dump_table_offset = IMEM_OFFSET_MEM_DUMP_TABLE
             if ram_dump.minidump and ram_dump.kernel_version >= (5, 10):
                 for a in ram_dump.ebi_files:
-                    if "md_SHRDIMEM" in a[3]:
+                    md_pattern = re.compile(r'md_shrdimem', re.IGNORECASE)
+                    if re.search(md_pattern, a[3]):
                         table_phys = ram_dump.read_word(a[1] + 0x10, virtual=False)
                         break
             else:
