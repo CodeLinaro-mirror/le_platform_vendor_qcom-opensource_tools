@@ -38,7 +38,7 @@ import module_table
 from mm import mm_init
 from register import Register
 from collections import namedtuple
-
+import shlex
 SP = 13
 LR = 14
 PC = 15
@@ -980,6 +980,12 @@ class RamDump():
                 '!!! This is really bad and probably indicates RAM corruption')
             print_out_str('!!! Some features may be disabled!')
 
+        # extract kernel's configuration to kconfig.txt
+        saved_config = self.open_file('kconfig.txt')
+        for l in self.config:
+            saved_config.write(l + '\n')
+
+        saved_config.close()
         try:
             self.va_bits = int(self.get_config_val("CONFIG_ARM64_VA_BITS"))
         except:
@@ -2274,7 +2280,7 @@ class RamDump():
                 mod_tbl_ent.section_offsets[sect_name] = sect_addr
             if self.is_config_defined('CONFIG_SMP'):
                 percpu_size = self.read_u32(module + percpu_size_offset)
-                if percpu_size is not 0:
+                if percpu_size != 0:
                     percpu_pointer = self.read_pointer(module + percpu_offset)
                     mod_tbl_ent.section_offsets['.data..percpu'] = percpu_pointer
             self.module_table.add_entry(mod_tbl_ent)
@@ -2388,7 +2394,12 @@ class RamDump():
 
     def has_debug_info(self, file):
         cmd = self.objdump_path + ' -h ' + file
-        objdump = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+        if platform.system() != "Linux":
+            objdump = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       universal_newlines=True, )
+        else:
+            objdump = subprocess.Popen(shlex.split(cmd), shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       universal_newlines=True, )
         out, err = objdump.communicate()
         if '.debug_info' in out:
             return True
