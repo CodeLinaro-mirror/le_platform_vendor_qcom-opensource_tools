@@ -1,5 +1,5 @@
 # Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
-# Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -187,7 +187,10 @@ def dump_cpufreq_data(ramdump):
     runqueues_addr = ramdump.address_of('runqueues')
     print_out_str("\nCPU Frequency information:\n" + "-" * 10)
     for i in ramdump.iter_cpus():
-        cpu_data_addr = ramdump.read_u64(cpufreq_data_addr, cpu=i)
+        cpu_data_addr = ramdump.read_pointer(cpufreq_data_addr, cpu=i)
+        if not cpu_data_addr:
+            print_out_str("cpufreq_cpu_data for cpu{} is not available.".format(i))
+            continue
         rq_addr = runqueues_addr + ramdump.per_cpu_offset(i)
 
         cur_freq = ramdump.read_structure_field(cpu_data_addr, 'struct cpufreq_policy', 'cur')
